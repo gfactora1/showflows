@@ -4,6 +4,8 @@ import { Resend } from 'resend'
 import crypto from 'crypto'
 import { headers } from 'next/headers'
 
+type Role = 'owner' | 'editor' | 'member' | 'readonly'
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}))
@@ -11,7 +13,7 @@ export async function POST(req: Request) {
     // Accept both camelCase (client) and snake_case (db-ish) inputs
     const projectId = body.projectId ?? body.project_id
     const invitedEmailRaw = body.invitedEmail ?? body.invited_email
-    const role = body.role
+    const role = body.role as Role | undefined
     const isManaged = body.isManaged ?? body.is_managed ?? false
 
     const invitedEmail =
@@ -29,10 +31,67 @@ export async function POST(req: Request) {
       )
     }
 
-    // Server-side Supabase client (service role for inserts + email workflow)
+    const h = await headers()
+
+    // ---- AuthN: require bearer token ----
+    const authHeader = h.get('authorization') || ''
+    const bearer = authHeader.toLowerCase().startsWith('bearer ')
+      ? authHeader.slice(7).trim()
+      : ''
+
+    if (!bearer) {
+      return NextResponse.json(
+        { ok: false, error: 'Not authenticated (missing Authorization: Bearer token).' },
+        { status: 401 }
+      )
+    }
+
+    // Server-side Supabase client (service role)
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
     const supabase = createClient(supabaseUrl, serviceKey)
+
+    // Validate user from bearer token
+    const { data: userData, error: userErr } = await supabase.auth.getUser(bearer)
+    if (userErr || !userData?.user) {
+      return NextResponse.json(
+        { ok: false, error: 'Invalid session. Please log in again.' },
+        { status: 401 }
+      )
+    }
+
+    const actorEmail = (userData.user.email || '').trim().toLowerCase()
+    if (!actorEmail) {
+      return NextResponse.json(
+        { ok: false, error: 'Your user account has no email. Cannot authorize.' },
+        { status: 401 }
+      )
+    }
+
+    // ---- AuthZ: only owner/editor can invite ----
+    const { data: memberRow, error: memberErr } = await supabase
+      .from('project_members')
+      .select('role')
+      .eq('project_id', projectId)
+      .eq('member_email', actorEmail)
+      .maybeSingle()
+
+    if (memberErr) {
+      return NextResponse.json(
+        { ok: false, error: `Permission check failed: ${memberErr.message}` },
+        { status: 500 }
+      )
+    }
+
+    const actorRole = (memberRow?.role as Role | undefined) ?? undefined
+    const canInvite = actorRole === 'owner' || actorRole === 'editor'
+
+    if (!canInvite) {
+      return NextResponse.json(
+        { ok: false, error: 'Forbidden: you do not have permission to invite members.' },
+        { status: 403 }
+      )
+    }
 
     // Create invite token + expiry
     const token = crypto.randomBytes(24).toString('hex')
@@ -56,7 +115,6 @@ export async function POST(req: Request) {
     }
 
     // Build link (works locally + later when deployed)
-    const h = await headers()
     const origin = h.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
     const inviteUrl = `${origin}/invite/${token}`
 
@@ -77,13 +135,13 @@ export async function POST(req: Request) {
     })
 
     if (emailErr) {
-  // Invite exists; allow testing by returning the URL
-  return NextResponse.json({
-    ok: true,
-    data: { id: inviteRow.id, token: inviteRow.token, inviteUrl },
-    warning: `Invite created but email not sent: ${emailErr.message}`,
-  })
-}
+      // Invite exists; allow testing by returning the URL
+      return NextResponse.json({
+        ok: true,
+        data: { id: inviteRow.id, token: inviteRow.token, inviteUrl },
+        warning: `Invite created but email not sent: ${emailErr.message}`,
+      })
+    }
 
     return NextResponse.json({ ok: true, data: { id: inviteRow.id, token: inviteRow.token } })
   } catch (e: any) {
