@@ -42,19 +42,30 @@ export default function ProjectMembers({ project }: { project: Project }) {
   const [members, setMembers] = useState<Member[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
 
+  const [currentEmail, setCurrentEmail] = useState<string>('')
+  const [myRole, setMyRole] = useState<Role | null>(null)
+
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Exclude<Role, 'owner'>>('member')
   const [isManaged, setIsManaged] = useState(false)
+
+  // For non-managed members, default to invite flow
   const [sendInviteEmail, setSendInviteEmail] = useState(true)
 
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
 
-  const [myEmail, setMyEmail] = useState<string>('')
-  const [myRole, setMyRole] = useState<Role | null>(null)
-
   const trimmedEmail = useMemo(() => email.trim().toLowerCase(), [email])
-  const canManageMembers = myRole === 'owner' || myRole === 'editor'
+
+  const canManage = myRole === 'owner' || myRole === 'editor'
+
+  const loadCurrentUserEmail = async () => {
+    const { data, error } = await supabase.auth.getUser()
+    if (error) throw error
+    const em = (data.user?.email ?? '').trim().toLowerCase()
+    setCurrentEmail(em)
+    return em
+  }
 
   const loadMembers = async () => {
     const { data, error } = await supabase
@@ -64,19 +75,23 @@ export default function ProjectMembers({ project }: { project: Project }) {
       .order('created_at', { ascending: true })
 
     if (error) throw error
-
     const rows = (data ?? []) as Member[]
     setMembers(rows)
 
-    if (myEmail) {
-      const me = rows.find(
-        (m) => m.member_email?.toLowerCase() === myEmail.toLowerCase()
-      )
+    // compute my role (email-based membership)
+    if (currentEmail) {
+      const me = rows.find((m) => m.member_email?.toLowerCase() === currentEmail)
       setMyRole(me?.role ?? null)
     }
   }
 
   const loadInvites = async () => {
+    // Only load invites for owners/editors to avoid leaking hierarchy/meta
+    if (!canManage) {
+      setInvites([])
+      return
+    }
+
     const { data, error } = await supabase
       .from('project_invites')
       .select(
@@ -92,24 +107,41 @@ export default function ProjectMembers({ project }: { project: Project }) {
   const refresh = async () => {
     setMsg('')
     try {
-      await Promise.all([loadMembers(), loadInvites()])
+      // Ensure we know who is logged in before computing myRole
+      const em = currentEmail || (await loadCurrentUserEmail())
+      // Load members (will set myRole)
+      const { data, error } = await supabase
+        .from('project_members')
+        .select('id,project_id,member_email,role,is_managed,created_at')
+        .eq('project_id', project.id)
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+      const rows = (data ?? []) as Member[]
+      setMembers(rows)
+
+      const me = rows.find((m) => m.member_email?.toLowerCase() === em)
+      const roleFound = (me?.role ?? null) as Role | null
+      setMyRole(roleFound)
+
+      // Only after role is known, decide whether to load invites
+      if (roleFound === 'owner' || roleFound === 'editor') {
+        await loadInvites()
+      } else {
+        setInvites([])
+      }
     } catch (e: any) {
       setMsg(`Error loading: ${e?.message ?? String(e)}`)
     }
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      const sessionEmail = data.session?.user?.email ?? ''
-      setMyEmail(sessionEmail)
-    })
-  }, [])
-
-  useEffect(() => {
     refresh()
-  }, [project.id, myEmail])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id])
 
   useEffect(() => {
+    // If managed, we never send invites
     if (isManaged) setSendInviteEmail(false)
   }, [isManaged])
 
@@ -124,16 +156,9 @@ export default function ProjectMembers({ project }: { project: Project }) {
   }
 
   const createInviteAndSendEmail = async () => {
-    const { data: sessionData } = await supabase.auth.getSession()
-    const accessToken = sessionData.session?.access_token
-    if (!accessToken) throw new Error('Not logged in.')
-
     const res = await fetch('/api/invites/create', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         projectId: project.id,
         invitedEmail: trimmedEmail,
@@ -144,14 +169,27 @@ export default function ProjectMembers({ project }: { project: Project }) {
 
     const text = await res.text().catch(() => '')
     if (!res.ok) {
-      throw new Error(`Invite API failed (${res.status}). ${text || ''}`.trim())
+      throw new Error(`Invite API failed (${res.status}). ${text || 'Check /api/invites/create'}`)
+    }
+
+    // We’ll treat warnings as success but surface them so you know email didn’t send
+    try {
+      const json = JSON.parse(text || '{}')
+      if (json?.warning) {
+        setMsg(String(json.warning))
+      }
+    } catch {
+      // ignore
     }
   }
 
   const addMember = async () => {
     setMsg('')
 
-    if (!canManageMembers) return
+    if (!canManage) {
+      setMsg('Not allowed.')
+      return
+    }
 
     if (!trimmedEmail) {
       setMsg('Please enter an email.')
@@ -170,10 +208,12 @@ export default function ProjectMembers({ project }: { project: Project }) {
       } else {
         if (sendInviteEmail) {
           await createInviteAndSendEmail()
-          setMsg('Invite created.')
+          // if there was a warning, it was already setMsg() above
+          // otherwise show the normal success message
+          if (!msg) setMsg('Invite created.')
         } else {
           await addMemberDirect()
-          setMsg('Member added.')
+          setMsg('Member added (no invite sent).')
         }
       }
 
@@ -189,19 +229,77 @@ export default function ProjectMembers({ project }: { project: Project }) {
     }
   }
 
+  const updateMember = async (id: string, patch: Partial<Member>) => {
+    if (!canManage) return
+
+    setMsg('')
+    const { error } = await supabase.from('project_members').update(patch).eq('id', id)
+
+    if (error) {
+      setMsg(`Error updating member: ${error.message}`)
+      return
+    }
+
+    await refresh()
+  }
+
+  const removeMember = async (id: string) => {
+    if (!canManage) return
+
+    setMsg('')
+    const ok = confirm('Remove this member?')
+    if (!ok) return
+
+    const { error } = await supabase.from('project_members').delete().eq('id', id)
+    if (error) {
+      setMsg(`Error removing member: ${error.message}`)
+      return
+    }
+
+    await refresh()
+  }
+
+  const revokeInvite = async (inviteId: string) => {
+    if (!canManage) return
+
+    setMsg('')
+    const ok = confirm('Revoke this invite?')
+    if (!ok) return
+
+    const { error } = await supabase.from('project_invites').delete().eq('id', inviteId)
+    if (error) {
+      setMsg(`Error revoking invite: ${error.message}`)
+      return
+    }
+
+    await refresh()
+  }
+
+  const copyInviteLink = async (token: string) => {
+    if (!canManage) return
+
+    const url = `${window.location.origin}/invite/${token}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setMsg('Invite link copied to clipboard.')
+    } catch {
+      setMsg(`Copy failed. Here is the link: ${url}`)
+    }
+  }
+
   const pendingInvites = invites.filter((i) => !i.accepted_at)
 
   return (
     <section>
       <h3 style={{ marginTop: 0 }}>Members — {project.name}</h3>
 
-      {myRole && (
-        <p style={{ marginTop: 6, marginBottom: 14, opacity: 0.8 }}>
-          Role: <b>{myRole}</b>
-        </p>
-      )}
+      {/* Everyone can see their own role (no hierarchy beyond self) */}
+      <p style={{ marginTop: 6, opacity: 0.85 }}>
+        Your role: <b>{myRole ?? 'unknown'}</b>
+      </p>
 
-      {canManageMembers && (
+      {/* Management UI: only owners/editors */}
+      {canManage && (
         <>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <input
@@ -253,60 +351,136 @@ export default function ProjectMembers({ project }: { project: Project }) {
           </div>
 
           <p style={{ marginTop: 10, opacity: 0.8, maxWidth: 900 }}>
-            Use <b>Managed member</b> for people you’ll manage. For everyone else,
-            use <b>Send invite email</b> so they can join cleanly later.
+            Use <b>Managed member</b> for people you’ll manage (they may never log in). For everyone
+            else, use <b>Send invite email</b> so they can join cleanly and self-manage later.
           </p>
         </>
       )}
 
       {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
 
+      {/* Roster: everyone sees the list of users.
+          Only owners/editors see role+managed+controls. */}
       <table style={{ marginTop: 16, width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
-              Email
-            </th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
-              Role
-            </th>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
-              Managed
-            </th>
+            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Email</th>
+
+            {canManage && (
+              <>
+                <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
+                  Role
+                </th>
+                <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
+                  Managed
+                </th>
+                <th style={{ borderBottom: '1px solid #ddd', padding: 8 }} />
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
           {members.map((m) => (
             <tr key={m.id}>
-              <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-                {m.member_email}
-              </td>
-              <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-                {m.role}
-              </td>
-              <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-                <input type="checkbox" checked={m.is_managed} disabled />
-              </td>
+              <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>{m.member_email}</td>
+
+              {canManage && (
+                <>
+                  <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
+                    {m.role === 'owner' ? (
+                      <span>owner</span>
+                    ) : (
+                      <select
+                        value={m.role}
+                        onChange={(e) =>
+                          updateMember(m.id, { role: e.target.value as Role })
+                        }
+                        style={{ padding: 6 }}
+                      >
+                        <option value="editor">editor</option>
+                        <option value="member">member</option>
+                        <option value="readonly">readonly</option>
+                      </select>
+                    )}
+                  </td>
+
+                  <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
+                    <input
+                      type="checkbox"
+                      checked={m.is_managed}
+                      onChange={(e) => updateMember(m.id, { is_managed: e.target.checked })}
+                      disabled={m.role === 'owner'}
+                    />
+                  </td>
+
+                  <td
+                    style={{
+                      padding: 8,
+                      borderBottom: '1px solid #f0f0f0',
+                      textAlign: 'right',
+                    }}
+                  >
+                    {m.role !== 'owner' && (
+                      <button onClick={() => removeMember(m.id)}>Remove</button>
+                    )}
+                  </td>
+                </>
+              )}
             </tr>
           ))}
         </tbody>
       </table>
 
-      <div style={{ marginTop: 28 }}>
-        <h4 style={{ marginBottom: 8 }}>Pending Invites</h4>
+      {members.length === 0 && (
+        <p style={{ marginTop: 12, opacity: 0.8 }}>No members yet.</p>
+      )}
 
-        {canManageMembers ? (
-          pendingInvites.length === 0 ? (
+      {/* Pending invites: only owners/editors */}
+      {canManage && (
+        <div style={{ marginTop: 28 }}>
+          <h4 style={{ marginBottom: 8 }}>Pending Invites</h4>
+
+          {pendingInvites.length === 0 ? (
             <p style={{ marginTop: 0, opacity: 0.8 }}>No pending invites.</p>
           ) : (
-            <p>Invite list visible here.</p>
-          )
-        ) : (
-          <p style={{ marginTop: 0, opacity: 0.6 }}>
-            Pending invites are only visible to owners and editors.
-          </p>
-        )}
-      </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
+                    Invited Email
+                  </th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
+                    Role
+                  </th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
+                    Expires
+                  </th>
+                  <th style={{ borderBottom: '1px solid #ddd', padding: 8 }} />
+                </tr>
+              </thead>
+              <tbody>
+                {pendingInvites.map((inv) => (
+                  <tr key={inv.id}>
+                    <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
+                      {inv.invited_email}
+                    </td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>{inv.role}</td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
+                      {new Date(inv.expires_at).toLocaleString()}
+                    </td>
+                    <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0', textAlign: 'right' }}>
+                      <button onClick={() => copyInviteLink(inv.token)} style={{ marginRight: 8 }}>
+                        Copy link
+                      </button>
+                      <button onClick={() => revokeInvite(inv.id)}>Revoke</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </section>
   )
 }
