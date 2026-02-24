@@ -155,10 +155,22 @@ export default function ProjectMembers({ project }: { project: Project }) {
     if (error) throw error
   }
 
+  // ✅ FIX: include Authorization Bearer token so /api/invites/create can authenticate
   const createInviteAndSendEmail = async () => {
+    const { data: sessionData, error: sessErr } = await supabase.auth.getSession()
+    if (sessErr) throw sessErr
+
+    const accessToken = sessionData.session?.access_token
+    if (!accessToken) {
+      throw new Error('Not authenticated (no session token). Please log in again.')
+    }
+
     const res = await fetch('/api/invites/create', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
       body: JSON.stringify({
         projectId: project.id,
         invitedEmail: trimmedEmail,
@@ -392,9 +404,7 @@ export default function ProjectMembers({ project }: { project: Project }) {
                     ) : (
                       <select
                         value={m.role}
-                        onChange={(e) =>
-                          updateMember(m.id, { role: e.target.value as Role })
-                        }
+                        onChange={(e) => updateMember(m.id, { role: e.target.value as Role })}
                         style={{ padding: 6 }}
                       >
                         <option value="editor">editor</option>
@@ -420,9 +430,7 @@ export default function ProjectMembers({ project }: { project: Project }) {
                       textAlign: 'right',
                     }}
                   >
-                    {m.role !== 'owner' && (
-                      <button onClick={() => removeMember(m.id)}>Remove</button>
-                    )}
+                    {m.role !== 'owner' && <button onClick={() => removeMember(m.id)}>Remove</button>}
                   </td>
                 </>
               )}
@@ -431,9 +439,7 @@ export default function ProjectMembers({ project }: { project: Project }) {
         </tbody>
       </table>
 
-      {members.length === 0 && (
-        <p style={{ marginTop: 12, opacity: 0.8 }}>No members yet.</p>
-      )}
+      {members.length === 0 && <p style={{ marginTop: 12, opacity: 0.8 }}>No members yet.</p>}
 
       {/* Pending invites: only owners/editors */}
       {canManage && (

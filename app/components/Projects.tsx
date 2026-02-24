@@ -30,11 +30,12 @@ export default function Projects() {
       return
     }
 
-    setProjects(data ?? [])
+    const rows = (data ?? []) as Project[]
+    setProjects(rows)
 
     // keep selection in sync if project list reloads
     if (selectedProject) {
-      const stillThere = (data ?? []).find((p) => p.id === selectedProject.id)
+      const stillThere = rows.find((p) => p.id === selectedProject.id)
       setSelectedProject(stillThere ?? null)
     }
   }
@@ -50,97 +51,39 @@ export default function Projects() {
     if (!trimmed) return
 
     setLoading(true)
+    try {
+      const { data: sessionData, error: sessErr } = await supabase.auth.getSession()
+      if (sessErr) throw sessErr
 
-    const { data: sessionData } = await supabase.auth.getSession()
-    const user = sessionData.session?.user
+      const user = sessionData.session?.user
+      if (!user?.id) {
+        setMsg('Not logged in.')
+        return
+      }
 
-    if (!user?.id || !user?.email) {
-      setLoading(false)
-      setMsg('Not logged in.')
-      return
-    }
+      // Create project. Owner membership is now seeded by DB trigger.
+      const { data: newProject, error: projErr } = await supabase
+        .from('projects')
+        .insert({
+          name: trimmed,
+          owner: user.id,
+        })
+        .select('id,name,color,created_at')
+        .single()
 
-    // 1) Create project and return new row
-    const { data: newProject, error: projErr } = await supabase
-      .from('projects')
-      .insert({
-        name: trimmed,
-        owner: user.id,
-      })
-      .select('id,name,color,created_at')
-      .single()
+      if (projErr || !newProject) {
+        throw new Error(projErr?.message ?? 'Unknown error creating project')
+      }
 
-    if (projErr || !newProject) {
-      setLoading(false)
-      setMsg(`Error creating project: ${projErr?.message ?? 'Unknown error'}`)
-      return
-    }
-
-    // 2) Add current user as owner in project_members
-    const { error: memErr } = await supabase.from('project_members').insert({
-      project_id: newProject.id,
-      member_email: user.email,
-      role: 'owner',
-      is_managed: false,
-    })
-
-    setLoading(false)
-
-    if (memErr) {
-      setMsg(
-        `Project created, but failed to add owner membership: ${memErr.message}`
-      )
-    } else {
       setName('')
-      setSelectedProject(newProject)
+      setSelectedProject(newProject as Project)
+
+      await loadProjects()
+    } catch (e: any) {
+      setMsg(`Error creating project: ${e?.message ?? String(e)}`)
+    } finally {
+      setLoading(false)
     }
-
-    await loadProjects()
-  }
-
-  const seedOwnerMemberships = async () => {
-    setMsg('')
-
-    const { data: sessionData } = await supabase.auth.getSession()
-    const user = sessionData.session?.user
-
-    if (!user?.email) {
-      setMsg('Not logged in.')
-      return
-    }
-
-    const { data: projs, error: pErr } = await supabase
-      .from('projects')
-      .select('id')
-
-    if (pErr) {
-      setMsg(`Error reading projects: ${pErr.message}`)
-      return
-    }
-
-    const rows =
-      (projs ?? []).map((p) => ({
-        project_id: p.id,
-        member_email: user.email!,
-        role: 'owner',
-        is_managed: false,
-      })) ?? []
-
-    if (rows.length === 0) {
-      setMsg('No projects found.')
-      return
-    }
-
-    const { error: iErr } = await supabase
-      .from('project_members')
-      .upsert(rows, { onConflict: 'project_id,member_email' })
-
-    if (iErr) {
-      setMsg(`Error seeding memberships: ${iErr.message}`)
-      return
-    }
-
-    setMsg('Owner memberships seeded successfully.')
   }
 
   return (
@@ -158,10 +101,6 @@ export default function Projects() {
           {loading ? 'Creating...' : 'Create'}
         </button>
       </div>
-
-      <button onClick={seedOwnerMemberships} style={{ marginTop: 12 }}>
-        Seed owner membership (one-time)
-      </button>
 
       {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
 
@@ -212,9 +151,7 @@ export default function Projects() {
           {selectedProject ? (
             <ProjectMembers project={selectedProject} />
           ) : (
-            <p style={{ opacity: 0.8 }}>
-              Select a project to manage members.
-            </p>
+            <p style={{ opacity: 0.8 }}>Select a project to manage members.</p>
           )}
         </div>
       </div>
