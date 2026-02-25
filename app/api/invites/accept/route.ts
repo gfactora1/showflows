@@ -1,57 +1,62 @@
+// app/api/invites/lookup/route.ts
+
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabaseServer'
+import { createClient } from '@supabase/supabase-js'
 
 export async function POST(req: Request) {
   try {
-    const { token } = (await req.json()) as { token: string }
-    const t = token?.trim()
-    if (!t) return NextResponse.json({ ok: false, error: 'Missing token.' }, { status: 400 })
+    const body = await req.json().catch(() => ({}))
+    const token = String(body?.token ?? '').trim()
 
-    const sb = supabaseServer()
+    if (!token) {
+      return NextResponse.json({ ok: false, error: 'Missing token.' }, { status: 400 })
+    }
 
-    // Find invite
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+    if (!supabaseUrl || !serviceKey) {
+      return NextResponse.json(
+        { ok: false, error: 'Server misconfigured (missing Supabase env vars).' },
+        { status: 500 }
+      )
+    }
+
+    const sb = createClient(supabaseUrl, serviceKey)
+
+    // 1) Fetch invite by token
     const { data: inv, error: invErr } = await sb
       .from('project_invites')
       .select('id, project_id, invited_email, role, is_managed, expires_at, accepted_at')
-      .eq('token', t)
-      .single()
+      .eq('token', token)
+      .maybeSingle()
 
-    if (invErr || !inv) {
+    if (invErr) {
+      return NextResponse.json({ ok: false, error: invErr.message }, { status: 500 })
+    }
+
+    if (!inv) {
       return NextResponse.json({ ok: false, error: 'Invalid invite token.' }, { status: 404 })
     }
 
-    if (inv.accepted_at) {
-      return NextResponse.json({ ok: true, message: 'Invite already accepted.' })
+    // 2) Fetch project name (for nicer UI)
+    const { data: proj, error: projErr } = await sb
+      .from('projects')
+      .select('name')
+      .eq('id', inv.project_id)
+      .maybeSingle()
+
+    if (projErr) {
+      return NextResponse.json({ ok: false, error: projErr.message }, { status: 500 })
     }
 
-    if (inv.expires_at && new Date(inv.expires_at).getTime() < Date.now()) {
-      return NextResponse.json({ ok: false, error: 'Invite expired.' }, { status: 410 })
-    }
-
-    // Create membership (email-based)
-    const { error: memErr } = await sb.from('project_members').insert({
-      project_id: inv.project_id,
-      member_email: inv.invited_email,
-      role: inv.role,
-      is_managed: inv.is_managed,
+    return NextResponse.json({
+      ok: true,
+      data: {
+        ...inv,
+        project_name: proj?.name ?? null,
+      },
     })
-
-    if (memErr) {
-      // If you later add unique constraints, you may want to treat "already exists" as ok.
-      return NextResponse.json({ ok: false, error: memErr.message }, { status: 400 })
-    }
-
-    // Mark invite accepted
-    const { error: updErr } = await sb
-      .from('project_invites')
-      .update({ accepted_at: new Date().toISOString() })
-      .eq('id', inv.id)
-
-    if (updErr) {
-      return NextResponse.json({ ok: false, error: updErr.message }, { status: 400 })
-    }
-
-    return NextResponse.json({ ok: true })
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message ?? 'Unknown error' }, { status: 500 })
   }

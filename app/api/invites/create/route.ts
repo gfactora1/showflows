@@ -6,18 +6,37 @@ import { headers } from 'next/headers'
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
+function normalizeEmail(input: unknown) {
+  return typeof input === 'string' ? input.trim().toLowerCase() : ''
+}
+
+function sanitizeFrom(fromValue: string | undefined) {
+  const fallback = 'ShowFlows <invites@showflows.net>'
+  const raw = (fromValue || '').trim()
+
+  if (!raw) return fallback
+
+  // If someone accidentally pasted "RESEND_FROM_EMAIL=ShowFlows <...>" as the value, strip it
+  const stripped = raw.replace(/^RESEND_FROM_EMAIL\s*=\s*/i, '').trim()
+
+  // Very light validation: must contain an email-ish part
+  if (!stripped.includes('@') || !stripped.includes('<') || !stripped.includes('>')) {
+    // allow bare email too
+    if (stripped.includes('@')) return stripped
+    return fallback
+  }
+
+  return stripped
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}))
 
-    // Accept both camelCase (client) and snake_case (db-ish) inputs
     const projectId = body.projectId ?? body.project_id
-    const invitedEmailRaw = body.invitedEmail ?? body.invited_email
+    const invitedEmail = normalizeEmail(body.invitedEmail ?? body.invited_email)
     const role = body.role as Role | undefined
-    const isManaged = body.isManaged ?? body.is_managed ?? false
-
-    const invitedEmail =
-      typeof invitedEmailRaw === 'string' ? invitedEmailRaw.trim().toLowerCase() : ''
+    const isManaged = Boolean(body.isManaged ?? body.is_managed ?? false)
 
     if (!projectId || !invitedEmail || !role) {
       return NextResponse.json(
@@ -49,6 +68,12 @@ export async function POST(req: Request) {
     // Server-side Supabase client (service role)
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    if (!supabaseUrl || !serviceKey) {
+      return NextResponse.json(
+        { ok: false, error: 'Server misconfigured (missing Supabase env vars).' },
+        { status: 500 }
+      )
+    }
     const supabase = createClient(supabaseUrl, serviceKey)
 
     // Validate user from bearer token
@@ -60,7 +85,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const actorEmail = (userData.user.email || '').trim().toLowerCase()
+    const actorEmail = normalizeEmail(userData.user.email)
     if (!actorEmail) {
       return NextResponse.json(
         { ok: false, error: 'Your user account has no email. Cannot authorize.' },
@@ -85,7 +110,6 @@ export async function POST(req: Request) {
 
     const actorRole = (memberRow?.role as Role | undefined) ?? undefined
     const canInvite = actorRole === 'owner' || actorRole === 'editor'
-
     if (!canInvite) {
       return NextResponse.json(
         { ok: false, error: 'Forbidden: you do not have permission to invite members.' },
@@ -93,9 +117,103 @@ export async function POST(req: Request) {
       )
     }
 
-    // Create invite token + expiry
-    const token = crypto.randomBytes(24).toString('hex')
+    // ---- Load project name for email personalization ----
+    const { data: proj, error: projErr } = await supabase
+      .from('projects')
+      .select('name')
+      .eq('id', projectId)
+      .single()
+
+    if (projErr || !proj?.name) {
+      return NextResponse.json(
+        { ok: false, error: `Could not load project name: ${projErr?.message ?? 'Unknown error'}` },
+        { status: 500 }
+      )
+    }
+
+    const projectName = proj.name
+
+    // Build link origin (works locally + later when deployed)
+    const origin = h.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+
+    // Resend setup
+    const resendKey = process.env.RESEND_API_KEY!
+    if (!resendKey) {
+      return NextResponse.json(
+        { ok: false, error: 'Server misconfigured (missing RESEND_API_KEY).' },
+        { status: 500 }
+      )
+    }
+
+    const resendFrom = sanitizeFrom(process.env.RESEND_FROM_EMAIL)
+    const resend = new Resend(resendKey)
+
+    const subject = `You're invited to join ${projectName} on ShowFlows`
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString() // 7 days
+
+    const buildHtml = (inviteUrl: string) => `
+      <div style="font-family: Arial, Helvetica, sans-serif; line-height: 1.5;">
+        <p>You’ve been invited to join <b>${projectName}</b> on <b>ShowFlows</b>.</p>
+        <p><a href="${inviteUrl}">Accept your invite</a></p>
+        <p style="color:#666;">This link expires in 7 days.</p>
+      </div>
+    `
+
+    const buildText = (inviteUrl: string) =>
+      `You've been invited to join ${projectName} on ShowFlows.\n\nAccept your invite: ${inviteUrl}\n\nThis link expires in 7 days.`
+
+    // -----------------------------
+    // Idempotency: reuse pending invite if it already exists
+    // -----------------------------
+    const { data: existingInvite, error: existingErr } = await supabase
+      .from('project_invites')
+      .select('id, token')
+      .eq('project_id', projectId)
+      .eq('invited_email', invitedEmail)
+      .is('accepted_at', null)
+      .order('created_at', { ascending: false })
+      .maybeSingle()
+
+    if (existingErr) {
+      return NextResponse.json(
+        { ok: false, error: `Invite lookup failed: ${existingErr.message}` },
+        { status: 500 }
+      )
+    }
+
+    // If pending invite exists, reuse it (and extend expiry)
+    if (existingInvite?.id && existingInvite?.token) {
+      const token = existingInvite.token
+
+      // Extend expiry on resend
+      await supabase.from('project_invites').update({ expires_at: expiresAt }).eq('id', existingInvite.id)
+
+      const inviteUrl = `${origin}/invite/${token}`
+
+      const { error: emailErr } = await resend.emails.send({
+        from: resendFrom,
+        to: invitedEmail,
+        subject,
+        html: buildHtml(inviteUrl),
+        text: buildText(inviteUrl),
+      })
+
+      if (emailErr) {
+        return NextResponse.json({
+          ok: true,
+          reused: true,
+          data: { id: existingInvite.id, token, inviteUrl },
+          warning: `Invite already existed; tried to resend but email not sent: ${emailErr.message}`,
+        })
+      }
+
+      return NextResponse.json({ ok: true, reused: true, data: { id: existingInvite.id, token } })
+    }
+
+    // -----------------------------
+    // No pending invite exists — create a new one
+    // -----------------------------
+    const token = crypto.randomBytes(24).toString('hex')
 
     const { data: inviteRow, error: insertErr } = await supabase
       .from('project_invites')
@@ -103,47 +221,37 @@ export async function POST(req: Request) {
         project_id: projectId,
         invited_email: invitedEmail,
         role,
-        is_managed: !!isManaged,
+        is_managed: isManaged,
         token,
         expires_at: expiresAt,
       })
       .select('id, token')
       .single()
 
-    if (insertErr) {
-      return NextResponse.json({ ok: false, error: insertErr.message }, { status: 500 })
+    if (insertErr || !inviteRow?.id) {
+      return NextResponse.json({ ok: false, error: insertErr?.message ?? 'Invite insert failed.' }, { status: 500 })
     }
 
-    // Build link (works locally + later when deployed)
-    const origin = h.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
     const inviteUrl = `${origin}/invite/${token}`
-
-    // Send email via Resend
-    const resendKey = process.env.RESEND_API_KEY!
-    const resendFrom = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
-    const resend = new Resend(resendKey)
 
     const { error: emailErr } = await resend.emails.send({
       from: resendFrom,
       to: invitedEmail,
-      subject: 'You’ve been invited to a ShowFlows project',
-      html: `
-        <p>You’ve been invited to join a project in <b>ShowFlows</b>.</p>
-        <p><a href="${inviteUrl}">Click here to accept your invite</a></p>
-        <p>This link expires in 7 days.</p>
-      `,
+      subject,
+      html: buildHtml(inviteUrl),
+      text: buildText(inviteUrl),
     })
 
     if (emailErr) {
-      // Invite exists; allow testing by returning the URL
       return NextResponse.json({
         ok: true,
+        reused: false,
         data: { id: inviteRow.id, token: inviteRow.token, inviteUrl },
         warning: `Invite created but email not sent: ${emailErr.message}`,
       })
     }
 
-    return NextResponse.json({ ok: true, data: { id: inviteRow.id, token: inviteRow.token } })
+    return NextResponse.json({ ok: true, reused: false, data: { id: inviteRow.id, token: inviteRow.token } })
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e?.message || 'Unknown error' }, { status: 500 })
   }

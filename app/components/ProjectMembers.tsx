@@ -67,7 +67,7 @@ export default function ProjectMembers({ project }: { project: Project }) {
     return em
   }
 
-  const loadMembers = async () => {
+  const loadMembers = async (em: string) => {
     const { data, error } = await supabase
       .from('project_members')
       .select('id,project_id,member_email,role,is_managed,created_at')
@@ -78,15 +78,15 @@ export default function ProjectMembers({ project }: { project: Project }) {
     const rows = (data ?? []) as Member[]
     setMembers(rows)
 
-    // compute my role (email-based membership)
-    if (currentEmail) {
-      const me = rows.find((m) => m.member_email?.toLowerCase() === currentEmail)
-      setMyRole(me?.role ?? null)
-    }
+    const me = rows.find((m) => m.member_email?.toLowerCase() === em)
+    const roleFound = (me?.role ?? null) as Role | null
+    setMyRole(roleFound)
+
+    return roleFound
   }
 
-  const loadInvites = async () => {
-    // Only load invites for owners/editors to avoid leaking hierarchy/meta
+  // ✅ FIX: Only load *pending* invites from DB so accepted invites can never “reappear”
+  const loadPendingInvites = async () => {
     if (!canManage) {
       setInvites([])
       return
@@ -94,10 +94,9 @@ export default function ProjectMembers({ project }: { project: Project }) {
 
     const { data, error } = await supabase
       .from('project_invites')
-      .select(
-        'id,project_id,invited_email,role,is_managed,token,expires_at,accepted_at,created_at'
-      )
+      .select('id,project_id,invited_email,role,is_managed,token,expires_at,accepted_at,created_at')
       .eq('project_id', project.id)
+      .is('accepted_at', null)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -107,26 +106,11 @@ export default function ProjectMembers({ project }: { project: Project }) {
   const refresh = async () => {
     setMsg('')
     try {
-      // Ensure we know who is logged in before computing myRole
       const em = currentEmail || (await loadCurrentUserEmail())
-      // Load members (will set myRole)
-      const { data, error } = await supabase
-        .from('project_members')
-        .select('id,project_id,member_email,role,is_managed,created_at')
-        .eq('project_id', project.id)
-        .order('created_at', { ascending: true })
+      const roleFound = await loadMembers(em)
 
-      if (error) throw error
-      const rows = (data ?? []) as Member[]
-      setMembers(rows)
-
-      const me = rows.find((m) => m.member_email?.toLowerCase() === em)
-      const roleFound = (me?.role ?? null) as Role | null
-      setMyRole(roleFound)
-
-      // Only after role is known, decide whether to load invites
       if (roleFound === 'owner' || roleFound === 'editor') {
-        await loadInvites()
+        await loadPendingInvites()
       } else {
         setInvites([])
       }
@@ -155,7 +139,7 @@ export default function ProjectMembers({ project }: { project: Project }) {
     if (error) throw error
   }
 
-  // ✅ FIX: include Authorization Bearer token so /api/invites/create can authenticate
+  // ✅ include Authorization Bearer token so /api/invites/create can authenticate
   const createInviteAndSendEmail = async () => {
     const { data: sessionData, error: sessErr } = await supabase.auth.getSession()
     if (sessErr) throw sessErr
@@ -184,12 +168,10 @@ export default function ProjectMembers({ project }: { project: Project }) {
       throw new Error(`Invite API failed (${res.status}). ${text || 'Check /api/invites/create'}`)
     }
 
-    // We’ll treat warnings as success but surface them so you know email didn’t send
+    // surface warning if API returns one
     try {
       const json = JSON.parse(text || '{}')
-      if (json?.warning) {
-        setMsg(String(json.warning))
-      }
+      if (json?.warning) setMsg(String(json.warning))
     } catch {
       // ignore
     }
@@ -220,8 +202,6 @@ export default function ProjectMembers({ project }: { project: Project }) {
       } else {
         if (sendInviteEmail) {
           await createInviteAndSendEmail()
-          // if there was a warning, it was already setMsg() above
-          // otherwise show the normal success message
           if (!msg) setMsg('Invite created.')
         } else {
           await addMemberDirect()
@@ -299,6 +279,7 @@ export default function ProjectMembers({ project }: { project: Project }) {
     }
   }
 
+  // since we only load pending invites from DB, this is redundant but harmless
   const pendingInvites = invites.filter((i) => !i.accepted_at)
 
   return (
