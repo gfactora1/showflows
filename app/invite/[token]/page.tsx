@@ -1,16 +1,15 @@
 'use client'
 
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 
 type InviteInfo = {
-  id: string
   project_id: string
   invited_email: string
   role: 'editor' | 'member' | 'readonly'
   is_managed: boolean
   expires_at: string
-  accepted_at: string | null
+  accepted_at?: string | null
   project_name?: string | null
 }
 
@@ -19,6 +18,7 @@ type Status = 'idle' | 'loading' | 'ready' | 'accepting' | 'success' | 'error'
 export default function InvitePage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const token = useMemo(() => {
     const t = (params as any)?.token
@@ -26,9 +26,14 @@ export default function InvitePage() {
     return typeof t === 'string' ? t : ''
   }, [params])
 
+  // If we got redirected back here after login, we can show a tiny hint (optional)
+  const fromLogin = searchParams?.get('from') === 'login'
+
   const [status, setStatus] = useState<Status>('idle')
   const [msg, setMsg] = useState('')
   const [invite, setInvite] = useState<InviteInfo | null>(null)
+
+  const invitePath = useMemo(() => `/invite/${token}`, [token])
 
   const loadInvite = async () => {
     setMsg('')
@@ -81,6 +86,11 @@ export default function InvitePage() {
       }
 
       setStatus('ready')
+
+      // Optional UX: if we just came back from login, encourage clicking Accept
+      if (fromLogin) {
+        setMsg('You’re signed in. Click “Accept invite” to join this project.')
+      }
     } catch (e: any) {
       setInvite(null)
       setStatus('error')
@@ -90,19 +100,21 @@ export default function InvitePage() {
 
   const acceptInvite = async () => {
     setMsg('')
+
     if (!token) {
       setStatus('error')
       setMsg('Missing invite token in the URL.')
       return
     }
 
-    // Only allow accepting when we’re actually ready
     if (status !== 'ready') return
 
     setStatus('accepting')
     try {
+      // Accept requires auth cookies (SSR client + RPC)
       const res = await fetch('/api/invites/accept', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
       })
@@ -110,6 +122,13 @@ export default function InvitePage() {
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
+        // ✅ Clean UX: if not logged in, send them to login WITH a return path
+        if (res.status === 401) {
+          const next = encodeURIComponent(invitePath)
+          router.push(`/?next=${next}`)
+          return
+        }
+
         setStatus('error')
         setMsg(json?.error ? String(json.error) : `Accept failed (${res.status}).`)
         return

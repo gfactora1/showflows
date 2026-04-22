@@ -166,7 +166,7 @@ export async function GET(request: Request) {
   const { data: shows, error: showsErr } = showIds.length
     ? await supabase
         .from("shows")
-        .select("id,title,venue,city,load_in_at,starts_at,ends_at,provider_id")
+        .select("id,title,venue_id,load_in_at,starts_at,ends_at,provider_id")
         .eq("project_id", projectId)
         .in("id", showIds)
     : { data: [], error: null as any };

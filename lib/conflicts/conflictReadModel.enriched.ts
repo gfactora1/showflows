@@ -5,7 +5,7 @@ import type { ConflictCardModel } from "@/app/projects/[projectId]/conflicts/ui/
 type SeverityLabel = "Critical" | "Warning" | "Info";
 
 function severityToLabel(n: number): SeverityLabel {
-  if (n <= 1) return "Critical";
+  if (n >= 3) return "Critical";
   if (n === 2) return "Warning";
   return "Info";
 }

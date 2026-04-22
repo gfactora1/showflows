@@ -17,12 +17,8 @@ type ComputedConflictRow = {
   created_at: string;
 };
 
-function severityToLabel(n: number): "Critical" | "Warning" | "Info" {
-  // We are not guessing beyond what’s safe:
-  // - your default is 2, so treat 2 as Warning
-  // - 1 is Critical
-  // - 3+ becomes Info
-  if (n <= 1) return "Critical";
+function severityToLabel(n: number): SeverityLabel {
+  if (n >= 3) return "Critical";
   if (n === 2) return "Warning";
   return "Info";
 }

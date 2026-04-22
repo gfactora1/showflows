@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
-import ProjectMembers from './ProjectMembers'
+import ProjectDetail from './ProjectDetail'
 
 type Project = {
   id: string
@@ -11,9 +11,12 @@ type Project = {
   created_at: string
 }
 
+type Role = 'owner' | 'editor' | 'member' | 'readonly'
+
 export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
+  const [myRole, setMyRole] = useState<Role | null>(null)
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
@@ -33,17 +36,40 @@ export default function Projects() {
     const rows = (data ?? []) as Project[]
     setProjects(rows)
 
-    // keep selection in sync if project list reloads
     if (selectedProject) {
       const stillThere = rows.find((p) => p.id === selectedProject.id)
       setSelectedProject(stillThere ?? null)
     }
   }
 
+  const loadMyRole = async (projectId: string) => {
+    const { data: userData } = await supabase.auth.getUser()
+    const email = userData?.user?.email?.trim().toLowerCase() ?? ''
+    if (!email) return
+
+    const { data } = await supabase
+      .from('project_members')
+      .select('role')
+      .eq('project_id', projectId)
+      .eq('member_email', email)
+      .maybeSingle()
+
+    setMyRole((data?.role as Role) ?? null)
+  }
+
   useEffect(() => {
     loadProjects()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (selectedProject) {
+      loadMyRole(selectedProject.id)
+    } else {
+      setMyRole(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject?.id])
 
   const createProject = async () => {
     setMsg('')
@@ -61,13 +87,9 @@ export default function Projects() {
         return
       }
 
-      // Create project. Owner membership is now seeded by DB trigger.
       const { data: newProject, error: projErr } = await supabase
         .from('projects')
-        .insert({
-          name: trimmed,
-          owner: user.id,
-        })
+        .insert({ name: trimmed, owner: user.id })
         .select('id,name,color,created_at')
         .single()
 
@@ -77,7 +99,6 @@ export default function Projects() {
 
       setName('')
       setSelectedProject(newProject as Project)
-
       await loadProjects()
     } catch (e: any) {
       setMsg(`Error creating project: ${e?.message ?? String(e)}`)
@@ -105,8 +126,8 @@ export default function Projects() {
       {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
 
       <div style={{ display: 'flex', gap: 32, marginTop: 16 }}>
-        <div style={{ minWidth: 320 }}>
-          <ul style={{ paddingLeft: 18 }}>
+        <div style={{ minWidth: 220 }}>
+          <ul style={{ paddingLeft: 0, listStyle: 'none', margin: 0 }}>
             {projects.map((p) => {
               const isSelected = selectedProject?.id === p.id
               return (
@@ -129,7 +150,7 @@ export default function Projects() {
                         width: 10,
                         height: 10,
                         borderRadius: 999,
-                        background: p.color,
+                        background: p.color ?? '#ccc',
                         marginRight: 8,
                       }}
                     />
@@ -147,11 +168,11 @@ export default function Projects() {
           )}
         </div>
 
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           {selectedProject ? (
-            <ProjectMembers project={selectedProject} />
+            <ProjectDetail project={selectedProject} myRole={myRole} />
           ) : (
-            <p style={{ opacity: 0.8 }}>Select a project to manage members.</p>
+            <p style={{ opacity: 0.8 }}>Select a project to get started.</p>
           )}
         </div>
       </div>

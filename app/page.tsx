@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import Projects from './components/Projects'
 
@@ -9,16 +9,24 @@ export default function Home() {
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
 
+  // Read ?next=... from the URL (client-side)
+  const nextPath = useMemo(() => {
+    if (typeof window === 'undefined') return '/'
+    const url = new URL(window.location.href)
+    const next = url.searchParams.get('next')
+    // Basic safety: must be a relative path
+    if (!next || !next.startsWith('/')) return '/'
+    return next
+  }, [])
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
     })
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session)
-      }
-    )
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
 
     return () => {
       listener.subscription.unsubscribe()
@@ -26,9 +34,13 @@ export default function Home() {
   }, [])
 
   const handleLogin = async () => {
+    setMessage('')
+
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: { emailRedirectTo: redirectTo },
     })
 
     if (error) {

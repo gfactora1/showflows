@@ -85,7 +85,7 @@ export default function ProjectMembers({ project }: { project: Project }) {
     return roleFound
   }
 
-  // ✅ FIX: Only load *pending* invites from DB so accepted invites can never “reappear”
+  // ✅ Only load *pending* invites from DB so accepted invites can never “reappear”
   const loadPendingInvites = async () => {
     if (!canManage) {
       setInvites([])
@@ -139,21 +139,13 @@ export default function ProjectMembers({ project }: { project: Project }) {
     if (error) throw error
   }
 
-  // ✅ include Authorization Bearer token so /api/invites/create can authenticate
+  // Cookie-auth (SSR) invite creation endpoint: NO bearer token required.
   const createInviteAndSendEmail = async () => {
-    const { data: sessionData, error: sessErr } = await supabase.auth.getSession()
-    if (sessErr) throw sessErr
-
-    const accessToken = sessionData.session?.access_token
-    if (!accessToken) {
-      throw new Error('Not authenticated (no session token). Please log in again.')
-    }
-
     const res = await fetch('/api/invites/create', {
       method: 'POST',
+      credentials: 'include', // explicit; same-origin cookies are required
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({
         projectId: project.id,
@@ -202,7 +194,7 @@ export default function ProjectMembers({ project }: { project: Project }) {
       } else {
         if (sendInviteEmail) {
           await createInviteAndSendEmail()
-          if (!msg) setMsg('Invite created.')
+          setMsg((prev) => prev || 'Invite created.')
         } else {
           await addMemberDirect()
           setMsg('Member added (no invite sent).')
