@@ -38,6 +38,29 @@ type Props = {
 
 export default function ProjectDetail({ project, myRole }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('shows')
+  const [upgrading, setUpgrading] = useState(false)
+
+  const handleUpgrade = async () => {
+    setUpgrading(true)
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id }),
+      })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        alert(data.error ?? 'Something went wrong')
+        setUpgrading(false)
+      }
+    } catch {
+      alert('Something went wrong. Please try again.')
+      setUpgrading(false)
+    }
+  }
 
   return (
     <div>
@@ -89,21 +112,41 @@ export default function ProjectDetail({ project, myRole }: Props) {
             Pro feature — detects scheduling conflicts, missing required roles, and missing
             sound providers across your upcoming shows.
           </p>
-          <a
-            href={`/projects/${project.id}/conflicts`}
-            style={{
-              display: 'inline-block',
-              padding: '10px 20px',
-              background: '#111',
-              color: 'white',
-              borderRadius: 8,
-              textDecoration: 'none',
-              fontSize: 14,
-              fontWeight: 500,
-            }}
-          >
-            Open Conflict Intelligence →
-          </a>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <a
+              href={`/projects/${project.id}/conflicts`}
+              style={{
+                display: 'inline-block',
+                padding: '10px 20px',
+                background: '#111',
+                color: 'white',
+                borderRadius: 8,
+                textDecoration: 'none',
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              Open Conflict Intelligence →
+            </a>
+            {myRole === 'owner' && (
+              <button
+                onClick={handleUpgrade}
+                disabled={upgrading}
+                style={{
+                  padding: '10px 20px',
+                  background: upgrading ? '#999' : '#6c47ff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: upgrading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {upgrading ? 'Redirecting...' : '⚡ Upgrade to Pro'}
+              </button>
+            )}
+          </div>
           <p style={{ marginTop: 16, fontSize: 13, opacity: 0.6 }}>
             Opens in full view. Use your browser back button to return here.
           </p>
