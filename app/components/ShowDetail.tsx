@@ -217,6 +217,8 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
 
     setLoading(true)
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+
       const { error } = await supabase.from('show_assignments').insert({
         project_id: projectId,
         show_id: show.id,
@@ -226,6 +228,20 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
       })
 
       if (error) throw error
+
+      // Fire conflict notification in background — don't block the UI
+      if (user) {
+        fetch(`/api/projects/${projectId}/notify-assignment-conflict`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            personId: addPersonId,
+            showId: show.id,
+            triggeredByUserId: user.id,
+          }),
+        }).catch((e) => console.error('Notification error:', e))
+      }
 
       setAddPersonId('')
       setAddRoleId('')

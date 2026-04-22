@@ -13,9 +13,10 @@ type UnavailabilityBlock = {
 }
 
 type Props = {
-  personId: string        // people.id (project-scoped)
+  projectId: string
+  personId: string
   personName: string
-  canManage: boolean      // owner = true
+  canManage: boolean
   onClose: () => void
 }
 
@@ -28,7 +29,7 @@ const blankForm = {
   note: '',
 }
 
-export default function UnavailabilityModal({ personId, personName, canManage, onClose }: Props) {
+export default function UnavailabilityModal({ projectId, personId, personName, canManage, onClose }: Props) {
   const [blocks, setBlocks] = useState<UnavailabilityBlock[]>([])
   const [form, setForm] = useState(blankForm)
   const [loading, setLoading] = useState(false)
@@ -89,6 +90,22 @@ export default function UnavailabilityModal({ personId, personName, canManage, o
 
       if (error) throw error
 
+      // Fire conflict notification in background — don't block the UI
+      fetch(`/api/projects/${projectId}/notify-availability-conflict`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          peopleId: personId,
+          startDate: form.start_date,
+          endDate: form.end_date,
+          startTime: form.full_day ? null : form.start_time || null,
+          endTime: form.full_day ? null : form.end_time || null,
+          note: form.note.trim() || null,
+          triggeredByUserId: user.id,
+        }),
+      }).catch((e) => console.error('Notification error:', e))
+
       setForm(blankForm)
       await loadBlocks()
     } catch (e: any) {
@@ -137,7 +154,6 @@ export default function UnavailabilityModal({ personId, personName, canManage, o
     return `${dateStr} (full day)`
   }
 
-  // Overlay and modal styles
   const overlayStyle: React.CSSProperties = {
     position: 'fixed',
     inset: 0,
@@ -187,7 +203,6 @@ export default function UnavailabilityModal({ personId, personName, canManage, o
     <div style={overlayStyle} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div style={modalStyle}>
 
-        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
           <div>
             <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Availability</h3>
@@ -201,7 +216,6 @@ export default function UnavailabilityModal({ personId, personName, canManage, o
           </button>
         </div>
 
-        {/* Add block form — owners only */}
         {canManage && (
           <div style={{ marginBottom: 24, padding: 16, background: '#f9f9f9', borderRadius: 8 }}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>Add Unavailability Block</div>
@@ -228,7 +242,6 @@ export default function UnavailabilityModal({ personId, personName, canManage, o
               </div>
             </div>
 
-            {/* Full day toggle */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <input
                 type="checkbox"
@@ -242,7 +255,6 @@ export default function UnavailabilityModal({ personId, personName, canManage, o
               </label>
             </div>
 
-            {/* Time range — only shown when not full day */}
             {!form.full_day && (
               <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
                 <div style={{ ...fieldStyle, flex: 1 }}>
@@ -301,7 +313,6 @@ export default function UnavailabilityModal({ personId, personName, canManage, o
           </div>
         )}
 
-        {/* Existing blocks */}
         <div>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
             Unavailability Blocks

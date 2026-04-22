@@ -35,8 +35,6 @@ export default function People({ projectId, myRole }: Props) {
   const [editForm, setEditForm] = useState(blank)
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
-
-  // Availability modal state
   const [availabilityPerson, setAvailabilityPerson] = useState<Person | null>(null)
 
   const canEdit = myRole === 'owner' || myRole === 'editor'
@@ -54,7 +52,6 @@ export default function People({ projectId, myRole }: Props) {
       setMsg(`Error loading people: ${error.message}`)
       return
     }
-
     setPeople((data ?? []) as Person[])
   }
 
@@ -75,9 +72,7 @@ export default function People({ projectId, myRole }: Props) {
         phone: form.phone.trim() || null,
         is_active: true,
       })
-
       if (error) throw error
-
       setForm(blank)
       await loadPeople()
     } catch (e: any) {
@@ -117,9 +112,7 @@ export default function People({ projectId, myRole }: Props) {
           phone: editForm.phone.trim() || null,
         })
         .eq('id', id)
-
       if (error) throw error
-
       setEditingId(null)
       setEditForm(blank)
       await loadPeople()
@@ -135,26 +128,16 @@ export default function People({ projectId, myRole }: Props) {
       .from('people')
       .update({ is_active: !person.is_active })
       .eq('id', person.id)
-
-    if (error) {
-      setMsg(`Error updating: ${error.message}`)
-      return
-    }
-
-    await loadPeople()
+    if (error) setMsg(`Error updating: ${error.message}`)
+    else await loadPeople()
   }
 
   const deletePerson = async (id: string) => {
     if (!confirm('Remove this person? This cannot be undone.')) return
     setMsg('')
-
     const { error } = await supabase.from('people').delete().eq('id', id)
-    if (error) {
-      setMsg(`Error removing person: ${error.message}`)
-      return
-    }
-
-    await loadPeople()
+    if (error) setMsg(`Error removing person: ${error.message}`)
+    else await loadPeople()
   }
 
   const active = people.filter((p) => p.is_active)
@@ -191,9 +174,7 @@ export default function People({ projectId, myRole }: Props) {
           {loading ? 'Saving…' : submitLabel}
         </button>
         {onCancel && (
-          <button onClick={onCancel} disabled={loading}>
-            Cancel
-          </button>
+          <button onClick={onCancel} disabled={loading}>Cancel</button>
         )}
       </div>
     </div>
@@ -239,7 +220,6 @@ export default function People({ projectId, myRole }: Props) {
                   )}
                 </>
               )}
-              {/* Availability button — owners only */}
               {canManageAvailability && (
                 <button
                   onClick={() => setAvailabilityPerson(person)}
@@ -280,14 +260,12 @@ export default function People({ projectId, myRole }: Props) {
         {active.length === 0 && inactive.length === 0 && (
           <p style={{ opacity: 0.8 }}>No people yet — add your first one above.</p>
         )}
-
         {active.length > 0 && (
           <>
             <h4 style={{ marginBottom: 8 }}>Active</h4>
             {active.map((p) => renderPerson(p))}
           </>
         )}
-
         {inactive.length > 0 && (
           <>
             <h4 style={{ marginBottom: 8, marginTop: 20 }}>Inactive</h4>
@@ -296,9 +274,9 @@ export default function People({ projectId, myRole }: Props) {
         )}
       </div>
 
-      {/* Availability modal */}
       {availabilityPerson && (
         <UnavailabilityModal
+          projectId={projectId}
           personId={availabilityPerson.id}
           personName={availabilityPerson.display_name}
           canManage={canManageAvailability}
