@@ -8,7 +8,8 @@ export type ConflictCardModel = {
   severityLabel: "Critical" | "Warning" | "Info";
   windowLabel?: string;
   detail?: string;
-  raw?: any; // now: detail json only
+  readableDetail?: string;
+  raw?: any;
 };
 
 function severityStyles(sev: ConflictCardModel["severityLabel"]) {
@@ -39,7 +40,6 @@ export function ConflictCard({ card }: { card: ConflictCardModel }) {
     <div className={`rounded-2xl border p-3 space-y-1 ${s.card}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="text-sm font-medium">{card.headline}</div>
-
         <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${s.pill}`}>
           {card.severityLabel}
         </span>
@@ -49,15 +49,12 @@ export function ConflictCard({ card }: { card: ConflictCardModel }) {
         <div className="text-xs text-muted-foreground">{card.windowLabel}</div>
       )}
 
-      {card.detail && <div className="text-sm">{card.detail}</div>}
+      {card.detail && (
+        <div className="text-sm">{card.detail}</div>
+      )}
 
-      {card.raw && Object.keys(card.raw ?? {}).length > 0 && (
-        <details className="text-xs text-muted-foreground mt-2">
-          <summary className="cursor-pointer select-none">Details</summary>
-          <pre className="overflow-auto mt-2 whitespace-pre-wrap">
-            {JSON.stringify(card.raw ?? {}, null, 2)}
-          </pre>
-        </details>
+      {card.readableDetail && (
+        <div className="text-xs text-muted-foreground mt-1">{card.readableDetail}</div>
       )}
     </div>
   );
