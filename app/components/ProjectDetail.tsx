@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ProjectMembers from './ProjectMembers'
 import Shows from './Shows'
 import People from './People'
@@ -39,6 +39,28 @@ type Props = {
 export default function ProjectDetail({ project, myRole }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('shows')
   const [upgrading, setUpgrading] = useState(false)
+  const [managingBilling, setManagingBilling] = useState(false)
+  const [isPro, setIsPro] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    const fetchBilling = async () => {
+      try {
+        const res = await fetch(`/api/projects/${project.id}/billing-status`, {
+          credentials: 'include',
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setIsPro(data.isPro ?? false)
+        } else {
+          setIsPro(false)
+        }
+      } catch {
+        setIsPro(false)
+      }
+    }
+
+    fetchBilling()
+  }, [project.id])
 
   const handleUpgrade = async () => {
     setUpgrading(true)
@@ -59,6 +81,28 @@ export default function ProjectDetail({ project, myRole }: Props) {
     } catch {
       alert('Something went wrong. Please try again.')
       setUpgrading(false)
+    }
+  }
+
+  const handleManageBilling = async () => {
+    setManagingBilling(true)
+    try {
+      const res = await fetch('/api/stripe/portal', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id }),
+      })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        alert(data.error ?? 'Something went wrong')
+        setManagingBilling(false)
+      }
+    } catch {
+      alert('Something went wrong. Please try again.')
+      setManagingBilling(false)
     }
   }
 
@@ -109,8 +153,9 @@ export default function ProjectDetail({ project, myRole }: Props) {
         <section>
           <h3 style={{ marginTop: 0 }}>Conflict Intelligence</h3>
           <p style={{ opacity: 0.75, maxWidth: 520, marginBottom: 20 }}>
-            Pro feature — detects scheduling conflicts, missing required roles, and missing
-            sound providers across your upcoming shows.
+            {isPro
+              ? 'Pro is active — conflict detection is running for your upcoming shows.'
+              : 'Pro feature — detects scheduling conflicts, missing required roles, and missing sound providers across your upcoming shows.'}
           </p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <a
@@ -128,7 +173,7 @@ export default function ProjectDetail({ project, myRole }: Props) {
             >
               Open Conflict Intelligence →
             </a>
-            {myRole === 'owner' && (
+            {myRole === 'owner' && isPro === false && (
               <button
                 onClick={handleUpgrade}
                 disabled={upgrading}
@@ -144,6 +189,24 @@ export default function ProjectDetail({ project, myRole }: Props) {
                 }}
               >
                 {upgrading ? 'Redirecting...' : '⚡ Upgrade to Pro'}
+              </button>
+            )}
+            {myRole === 'owner' && isPro === true && (
+              <button
+                onClick={handleManageBilling}
+                disabled={managingBilling}
+                style={{
+                  padding: '10px 20px',
+                  background: managingBilling ? '#999' : '#111',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: managingBilling ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {managingBilling ? 'Redirecting...' : 'Manage Subscription'}
               </button>
             )}
           </div>
