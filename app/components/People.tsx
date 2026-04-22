@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import UnavailabilityModal from './UnavailabilityModal'
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
@@ -35,8 +36,12 @@ export default function People({ projectId, myRole }: Props) {
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
 
+  // Availability modal state
+  const [availabilityPerson, setAvailabilityPerson] = useState<Person | null>(null)
+
   const canEdit = myRole === 'owner' || myRole === 'editor'
   const canDelete = myRole === 'owner'
+  const canManageAvailability = myRole === 'owner'
 
   const loadPeople = async () => {
     const { data, error } = await supabase
@@ -222,17 +227,36 @@ export default function People({ projectId, myRole }: Props) {
             {!person.is_active && (
               <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>Inactive</div>
             )}
-            {canEdit && (
-              <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-                <button onClick={() => startEdit(person)}>Edit</button>
-                <button onClick={() => toggleActive(person)}>
-                  {person.is_active ? 'Mark inactive' : 'Mark active'}
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {canEdit && (
+                <>
+                  <button onClick={() => startEdit(person)}>Edit</button>
+                  <button onClick={() => toggleActive(person)}>
+                    {person.is_active ? 'Mark inactive' : 'Mark active'}
+                  </button>
+                  {canDelete && (
+                    <button onClick={() => deletePerson(person.id)}>Remove</button>
+                  )}
+                </>
+              )}
+              {/* Availability button — owners only */}
+              {canManageAvailability && (
+                <button
+                  onClick={() => setAvailabilityPerson(person)}
+                  style={{
+                    padding: '4px 12px',
+                    background: 'none',
+                    border: '1px solid #bbb',
+                    borderRadius: 6,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    color: '#444',
+                  }}
+                >
+                  📅 Availability
                 </button>
-                {canDelete && (
-                  <button onClick={() => deletePerson(person.id)}>Remove</button>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </>
         )}
       </div>
@@ -271,6 +295,16 @@ export default function People({ projectId, myRole }: Props) {
           </>
         )}
       </div>
+
+      {/* Availability modal */}
+      {availabilityPerson && (
+        <UnavailabilityModal
+          personId={availabilityPerson.id}
+          personName={availabilityPerson.display_name}
+          canManage={canManageAvailability}
+          onClose={() => setAvailabilityPerson(null)}
+        />
+      )}
     </section>
   )
 }

@@ -8,6 +8,7 @@ import Roles from './Roles'
 import Providers from './Providers'
 import DefaultRoster from './DefaultRoster'
 import Venues from './Venues'
+import AvailabilityCalendar from './AvailabilityCalendar'
 
 type Project = {
   id: string
@@ -18,7 +19,7 @@ type Project = {
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
-type Tab = 'shows' | 'venues' | 'roster' | 'people' | 'roles' | 'providers' | 'members' | 'conflicts'
+type Tab = 'shows' | 'venues' | 'roster' | 'people' | 'roles' | 'providers' | 'members' | 'conflicts' | 'availability'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'shows', label: 'Shows' },
@@ -27,6 +28,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'people', label: 'People' },
   { key: 'roles', label: 'Roles' },
   { key: 'providers', label: 'Providers' },
+  { key: 'availability', label: '📅 Availability' },
   { key: 'conflicts', label: '⚡ Conflicts' },
   { key: 'members', label: 'Members' },
 ]
@@ -148,6 +150,7 @@ export default function ProjectDetail({ project, myRole }: Props) {
       {activeTab === 'providers' && <Providers projectId={project.id} myRole={myRole} />}
       {activeTab === 'roster' && <DefaultRoster projectId={project.id} myRole={myRole} />}
       {activeTab === 'venues' && <Venues projectId={project.id} myRole={myRole} />}
+      {activeTab === 'availability' && <AvailabilityCalendar projectId={project.id} />}
 
       {activeTab === 'conflicts' && (
         <section>
