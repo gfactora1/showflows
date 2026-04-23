@@ -9,6 +9,7 @@ import Providers from './Providers'
 import DefaultRoster from './DefaultRoster'
 import Venues from './Venues'
 import AvailabilityCalendar from './AvailabilityCalendar'
+import MemberShowsView from './MemberShowsView'
 
 type Project = {
   id: string
@@ -21,7 +22,7 @@ type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
 type Tab = 'shows' | 'venues' | 'roster' | 'people' | 'roles' | 'providers' | 'members' | 'conflicts' | 'availability'
 
-const TABS: { key: Tab; label: string }[] = [
+const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: 'shows', label: 'Shows' },
   { key: 'venues', label: 'Venues' },
   { key: 'roster', label: 'Default Roster' },
@@ -31,6 +32,11 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'availability', label: '📅 Availability' },
   { key: 'conflicts', label: '⚡ Conflicts' },
   { key: 'members', label: 'Members' },
+]
+
+const MEMBER_TABS: { key: Tab; label: string }[] = [
+  { key: 'shows', label: 'Shows' },
+  { key: 'availability', label: '📅 Availability' },
 ]
 
 type Props = {
@@ -43,6 +49,18 @@ export default function ProjectDetail({ project, myRole }: Props) {
   const [upgrading, setUpgrading] = useState(false)
   const [managingBilling, setManagingBilling] = useState(false)
   const [isPro, setIsPro] = useState<boolean | null>(null)
+  const [memberView, setMemberView] = useState(false)
+
+  const canToggle = myRole === 'owner' || myRole === 'editor'
+  const effectiveRole: Role | null = memberView ? 'member' : myRole
+
+  useEffect(() => {
+    if (memberView && activeTab !== 'shows' && activeTab !== 'availability') {
+      setActiveTab('shows')
+    }
+  }, [memberView, activeTab])
+
+  const TABS = memberView ? MEMBER_TABS : ADMIN_TABS
 
   useEffect(() => {
     const fetchBilling = async () => {
@@ -60,7 +78,6 @@ export default function ProjectDetail({ project, myRole }: Props) {
         setIsPro(false)
       }
     }
-
     fetchBilling()
   }, [project.id])
 
@@ -110,15 +127,47 @@ export default function ProjectDetail({ project, myRole }: Props) {
 
   return (
     <div>
-      <div
-        style={{
-          display: 'flex',
-          gap: 4,
-          borderBottom: '2px solid #ddd',
-          marginBottom: 20,
-          flexWrap: 'wrap',
-        }}
-      >
+      {/* View toggle — owners and editors only */}
+      {canToggle && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <button
+            onClick={() => setMemberView((v) => !v)}
+            style={{
+              padding: '5px 14px',
+              background: memberView ? '#f0f0f0' : 'none',
+              border: '1px solid #ddd',
+              borderRadius: 20,
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: 'pointer',
+              color: '#555',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            {memberView ? '⚙️ Switch to admin view' : '👤 Switch to member view'}
+          </button>
+        </div>
+      )}
+
+      {/* Member view banner */}
+      {memberView && (
+        <div style={{
+          background: '#f9f9f9',
+          border: '1px solid #e5e5e5',
+          borderRadius: 8,
+          padding: '8px 14px',
+          marginBottom: 16,
+          fontSize: 13,
+          color: '#888',
+        }}>
+          👤 Member view — you're seeing this project as a member would
+        </div>
+      )}
+
+      {/* Tab bar */}
+      <div style={{ display: 'flex', gap: 4, borderBottom: '2px solid #ddd', marginBottom: 20, flexWrap: 'wrap' }}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key
           return (
@@ -143,16 +192,21 @@ export default function ProjectDetail({ project, myRole }: Props) {
         })}
       </div>
 
-      {activeTab === 'members' && <ProjectMembers project={project} />}
-      {activeTab === 'shows' && <Shows projectId={project.id} myRole={myRole} />}
-      {activeTab === 'people' && <People projectId={project.id} myRole={myRole} />}
-      {activeTab === 'roles' && <Roles projectId={project.id} myRole={myRole} />}
-      {activeTab === 'providers' && <Providers projectId={project.id} myRole={myRole} />}
-      {activeTab === 'roster' && <DefaultRoster projectId={project.id} myRole={myRole} />}
-      {activeTab === 'venues' && <Venues projectId={project.id} myRole={myRole} />}
-      {activeTab === 'availability' && <AvailabilityCalendar projectId={project.id} />}
+      {/* Member view content */}
+      {memberView && activeTab === 'shows' && <MemberShowsView projectId={project.id} />}
+      {memberView && activeTab === 'availability' && <AvailabilityCalendar projectId={project.id} />}
 
-      {activeTab === 'conflicts' && (
+      {/* Admin view content */}
+      {!memberView && activeTab === 'members' && <ProjectMembers project={project} />}
+      {!memberView && activeTab === 'shows' && <Shows projectId={project.id} myRole={effectiveRole} />}
+      {!memberView && activeTab === 'people' && <People projectId={project.id} myRole={effectiveRole} />}
+      {!memberView && activeTab === 'roles' && <Roles projectId={project.id} myRole={effectiveRole} />}
+      {!memberView && activeTab === 'providers' && <Providers projectId={project.id} myRole={effectiveRole} />}
+      {!memberView && activeTab === 'roster' && <DefaultRoster projectId={project.id} myRole={effectiveRole} />}
+      {!memberView && activeTab === 'venues' && <Venues projectId={project.id} myRole={effectiveRole} />}
+      {!memberView && activeTab === 'availability' && <AvailabilityCalendar projectId={project.id} />}
+
+      {!memberView && activeTab === 'conflicts' && (
         <section>
           <h3 style={{ marginTop: 0 }}>Conflict Intelligence</h3>
           <p style={{ opacity: 0.75, maxWidth: 520, marginBottom: 20 }}>
