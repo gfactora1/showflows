@@ -4,11 +4,10 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '../../lib/supabaseClient'
 
-type Mode = 'signin' | 'signup' | 'magic'
+type Mode = 'signin' | 'signup' | 'magic' | 'forgot'
 
 function LoginForm() {
   const searchParams = useSearchParams()
-  // Support both ?next= and ?redirect= for compatibility
   const next = searchParams.get('next') ?? searchParams.get('redirect') ?? '/'
 
   const [mode, setMode] = useState<Mode>('signin')
@@ -18,7 +17,6 @@ function LoginForm() {
   const [msg, setMsg] = useState('')
   const [isError, setIsError] = useState(false)
 
-  // Redirect if already logged in
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
@@ -100,6 +98,24 @@ function LoginForm() {
     setLoading(false)
   }
 
+  const handleForgotPassword = async () => {
+    if (!email.trim()) return showMsg('Enter your email address above.', true)
+
+    setLoading(true)
+    setMsg('')
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+
+    if (error) {
+      showMsg(error.message, true)
+    } else {
+      showMsg('Password reset email sent — check your inbox.')
+    }
+    setLoading(false)
+  }
+
   // Styles
   const container: React.CSSProperties = {
     maxWidth: 420,
@@ -107,7 +123,6 @@ function LoginForm() {
     padding: '0 24px',
     fontFamily: 'sans-serif',
   }
-
   const logo: React.CSSProperties = {
     fontSize: 22,
     fontWeight: 700,
@@ -116,14 +131,12 @@ function LoginForm() {
     display: 'block',
     textAlign: 'center',
   }
-
   const card: React.CSSProperties = {
     border: '1px solid #e5e5e5',
     borderRadius: 12,
     padding: 32,
     background: 'white',
   }
-
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '10px 12px',
@@ -133,7 +146,6 @@ function LoginForm() {
     boxSizing: 'border-box',
     marginBottom: 12,
   }
-
   const primaryBtn: React.CSSProperties = {
     width: '100%',
     padding: '11px 0',
@@ -146,7 +158,6 @@ function LoginForm() {
     cursor: loading ? 'not-allowed' : 'pointer',
     marginBottom: 12,
   }
-
   const googleBtn: React.CSSProperties = {
     width: '100%',
     padding: '11px 0',
@@ -163,7 +174,6 @@ function LoginForm() {
     justifyContent: 'center',
     gap: 8,
   }
-
   const divider: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -172,13 +182,9 @@ function LoginForm() {
     color: '#aaa',
     fontSize: 13,
   }
-
   const dividerLine: React.CSSProperties = {
-    flex: 1,
-    height: 1,
-    background: '#eee',
+    flex: 1, height: 1, background: '#eee',
   }
-
   const tabStyle = (active: boolean): React.CSSProperties => ({
     flex: 1,
     padding: '8px 0',
@@ -193,7 +199,51 @@ function LoginForm() {
 
   const title = mode === 'signin' ? 'Sign in to ShowFlows' :
     mode === 'signup' ? 'Create your account' :
-    'Sign in with magic link'
+    mode === 'magic' ? 'Sign in with magic link' :
+    'Reset your password'
+
+  // Forgot password mode — simplified view
+  if (mode === 'forgot') {
+    return (
+      <div style={container}>
+        <span style={logo}>ShowFlows</span>
+        <div style={card}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 8px', textAlign: 'center' }}>
+            Reset your password
+          </h2>
+          <p style={{ color: '#888', fontSize: 13, textAlign: 'center', marginBottom: 24 }}>
+            Enter your email and we'll send you a reset link.
+          </p>
+
+          <input
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={inputStyle}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleForgotPassword() }}
+          />
+
+          {msg && (
+            <p style={{ fontSize: 13, color: isError ? '#c00' : '#1a7a3a', marginBottom: 12, textAlign: 'center' }}>
+              {msg}
+            </p>
+          )}
+
+          <button onClick={handleForgotPassword} disabled={loading} style={primaryBtn}>
+            {loading ? 'Sending…' : 'Send reset link'}
+          </button>
+
+          <button
+            onClick={() => { setMode('signin'); setMsg('') }}
+            style={{ background: 'none', border: 'none', width: '100%', textAlign: 'center', fontSize: 13, color: '#888', cursor: 'pointer' }}
+          >
+            Back to sign in
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={container}>
@@ -234,7 +284,6 @@ function LoginForm() {
           </button>
         </div>
 
-        {/* Email field */}
         <input
           type="email"
           placeholder="you@example.com"
@@ -242,13 +291,10 @@ function LoginForm() {
           onChange={(e) => setEmail(e.target.value)}
           style={inputStyle}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              mode === 'magic' ? handleMagicLink() : handleEmailPassword()
-            }
+            if (e.key === 'Enter') mode === 'magic' ? handleMagicLink() : handleEmailPassword()
           }}
         />
 
-        {/* Password field — not shown for magic link */}
         {mode !== 'magic' && (
           <input
             type="password"
@@ -256,19 +302,24 @@ function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             style={inputStyle}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleEmailPassword()
-            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleEmailPassword() }}
           />
         )}
 
+        {/* Forgot password link — only shown in sign in mode */}
+        {mode === 'signin' && (
+          <div style={{ textAlign: 'right', marginBottom: 12, marginTop: -4 }}>
+            <button
+              onClick={() => { setMode('forgot'); setMsg('') }}
+              style={{ background: 'none', border: 'none', fontSize: 12, color: '#888', cursor: 'pointer', padding: 0 }}
+            >
+              Forgot password?
+            </button>
+          </div>
+        )}
+
         {msg && (
-          <p style={{
-            fontSize: 13,
-            color: isError ? '#c00' : '#1a7a3a',
-            marginBottom: 12,
-            textAlign: 'center',
-          }}>
+          <p style={{ fontSize: 13, color: isError ? '#c00' : '#1a7a3a', marginBottom: 12, textAlign: 'center' }}>
             {msg}
           </p>
         )}
@@ -298,9 +349,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div style={{ padding: 40, textAlign: 'center', fontFamily: 'sans-serif' }}>
-        Loading…
-      </div>
+      <div style={{ padding: 40, textAlign: 'center', fontFamily: 'sans-serif' }}>Loading…</div>
     }>
       <LoginForm />
     </Suspense>
