@@ -13,6 +13,7 @@ function LoginForm() {
   const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
   const [isError, setIsError] = useState(false)
@@ -65,6 +66,9 @@ function LoginForm() {
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+          data: {
+            full_name: name.trim() || undefined,
+          },
         },
       })
       if (error) {
@@ -116,7 +120,6 @@ function LoginForm() {
     setLoading(false)
   }
 
-  // Styles
   const container: React.CSSProperties = {
     maxWidth: 420,
     margin: '80px auto',
@@ -202,7 +205,7 @@ function LoginForm() {
     mode === 'magic' ? 'Sign in with magic link' :
     'Reset your password'
 
-  // Forgot password mode — simplified view
+  // Forgot password mode
   if (mode === 'forgot') {
     return (
       <div style={container}>
@@ -214,7 +217,6 @@ function LoginForm() {
           <p style={{ color: '#888', fontSize: 13, textAlign: 'center', marginBottom: 24 }}>
             Enter your email and we'll send you a reset link.
           </p>
-
           <input
             type="email"
             placeholder="you@example.com"
@@ -223,17 +225,14 @@ function LoginForm() {
             style={inputStyle}
             onKeyDown={(e) => { if (e.key === 'Enter') handleForgotPassword() }}
           />
-
           {msg && (
             <p style={{ fontSize: 13, color: isError ? '#c00' : '#1a7a3a', marginBottom: 12, textAlign: 'center' }}>
               {msg}
             </p>
           )}
-
           <button onClick={handleForgotPassword} disabled={loading} style={primaryBtn}>
             {loading ? 'Sending…' : 'Send reset link'}
           </button>
-
           <button
             onClick={() => { setMode('signin'); setMsg('') }}
             style={{ background: 'none', border: 'none', width: '100%', textAlign: 'center', fontSize: 13, color: '#888', cursor: 'pointer' }}
@@ -284,6 +283,18 @@ function LoginForm() {
           </button>
         </div>
 
+        {/* Name field — signup only */}
+        {mode === 'signup' && (
+          <input
+            type="text"
+            placeholder="First and last name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={inputStyle}
+          />
+        )}
+
+        {/* Email field */}
         <input
           type="email"
           placeholder="you@example.com"
@@ -295,6 +306,7 @@ function LoginForm() {
           }}
         />
 
+        {/* Password field — not shown for magic link */}
         {mode !== 'magic' && (
           <input
             type="password"
@@ -306,7 +318,14 @@ function LoginForm() {
           />
         )}
 
-        {/* Forgot password link — only shown in sign in mode */}
+        {/* Password hint for signup */}
+        {mode === 'signup' && (
+          <p style={{ fontSize: 12, color: '#aaa', marginTop: -8, marginBottom: 12 }}>
+            At least 6 characters
+          </p>
+        )}
+
+        {/* Forgot password link — sign in mode only */}
         {mode === 'signin' && (
           <div style={{ textAlign: 'right', marginBottom: 12, marginTop: -4 }}>
             <button
