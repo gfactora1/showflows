@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
@@ -53,6 +53,12 @@ type Song = {
   uses_backing_track: boolean
 }
 
+type PersonalNote = {
+  id: string
+  song_order: number
+  notes: string
+}
+
 type ShowDetailTab = 'lineup' | 'setlist'
 
 type Props = {
@@ -95,8 +101,22 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
   const [newSong, setNewSong] = useState(blankSong)
   const [savingSetlist, setSavingSetlist] = useState(false)
 
+  // Personal notes
+  const [personalNotes, setPersonalNotes] = useState<Record<number, PersonalNote>>({})
+  const [editingNote, setEditingNote] = useState<number | null>(null)
+  const [noteInput, setNoteInput] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
   const canEdit = myRole === 'owner' || myRole === 'editor'
   const canDelete = myRole === 'owner'
+
+  // Get current user
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setCurrentUserId(data.user?.id ?? null)
+    })
+  }, [])
 
   const fetchAll = async (): Promise<Assignment[]> => {
     const [assignRes, peopleRes, rolesRes] = await Promise.all([
@@ -196,17 +216,32 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
     await fetchAll()
   }
 
-  const fetchSetlist = async () => {
+  const fetchSetlist = useCallback(async () => {
     setSetlistLoading(true)
     const { data, error } = await supabase.from('setlists').select('id, songs').eq('show_id', show.id).maybeSingle()
     setSetlistLoading(false)
     if (error) { setSetlistMsg(`Error loading setlist: ${error.message}`); return }
-    if (data) { setSetlistId(data.id); setSongs((data.songs ?? []) as Song[]) }
-  }
+    if (data) {
+      setSetlistId(data.id)
+      setSongs((data.songs ?? []) as Song[])
+
+      // Load personal notes for this setlist
+      const { data: notesData } = await supabase
+        .from('member_song_notes')
+        .select('id, song_order, notes')
+        .eq('setlist_id', data.id)
+
+      if (notesData) {
+        const notesMap: Record<number, PersonalNote> = {}
+        notesData.forEach((n: any) => { notesMap[n.song_order] = n })
+        setPersonalNotes(notesMap)
+      }
+    }
+  }, [show.id])
 
   useEffect(() => {
     if (activeTab === 'setlist') fetchSetlist()
-  }, [activeTab, show.id])
+  }, [activeTab, show.id, fetchSetlist])
 
   const saveSetlist = async (updatedSongs: Song[]) => {
     setSavingSetlist(true); setSetlistMsg('')
@@ -250,7 +285,53 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
     setSongs(reordered); await saveSetlist(reordered)
   }
 
-  // Group songs by set for display
+  const startEditNote = (songOrder: number) => {
+    setEditingNote(songOrder)
+    setNoteInput(personalNotes[songOrder]?.notes ?? '')
+  }
+
+  const cancelEditNote = () => {
+    setEditingNote(null)
+    setNoteInput('')
+  }
+
+  const savePersonalNote = async (songOrder: number) => {
+    if (!setlistId || !currentUserId) return
+    setSavingNote(true)
+
+    const existing = personalNotes[songOrder]
+    const trimmed = noteInput.trim()
+
+    if (!trimmed) {
+      // Delete if empty
+      if (existing) {
+        await supabase.from('member_song_notes').delete().eq('id', existing.id)
+        const updated = { ...personalNotes }
+        delete updated[songOrder]
+        setPersonalNotes(updated)
+      }
+    } else if (existing) {
+      // Update
+      const { error } = await supabase.from('member_song_notes').update({ notes: trimmed }).eq('id', existing.id)
+      if (!error) setPersonalNotes({ ...personalNotes, [songOrder]: { ...existing, notes: trimmed } })
+    } else {
+      // Insert
+      const { data, error } = await supabase.from('member_song_notes').insert({
+        setlist_id: setlistId,
+        song_order: songOrder,
+        user_id: currentUserId,
+        notes: trimmed,
+      }).select('id').single()
+      if (!error && data) {
+        setPersonalNotes({ ...personalNotes, [songOrder]: { id: data.id, song_order: songOrder, notes: trimmed } })
+      }
+    }
+
+    setSavingNote(false)
+    setEditingNote(null)
+    setNoteInput('')
+  }
+
   const songsBySet = songs.reduce((acc, song) => {
     const setNum = song.set || 1
     if (!acc[setNum]) acc[setNum] = []
@@ -259,9 +340,9 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
   }, {} as Record<number, Song[]>)
 
   const setNumbers = Object.keys(songsBySet).map(Number).sort((a, b) => a - b)
-
   const unassignedPeople = people.filter((p) => !assignments.find((a) => a.person_id === p.id))
   const venueDisplay = venue ? [venue.city, venue.state].filter(Boolean).join(', ') : null
+  const hasPersonalNotes = Object.keys(personalNotes).length > 0
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
     padding: '6px 16px', border: 'none',
@@ -376,19 +457,30 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
       {/* SETLIST TAB */}
       {activeTab === 'setlist' && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
             <h4 style={{ margin: 0 }}>
               Setlist {savingSetlist && <span style={{ fontSize: 12, fontWeight: 400, color: '#999' }}>Saving…</span>}
             </h4>
             {songs.length > 0 && (
-              <a
-                href={`/projects/${projectId}/shows/${show.id}/setlist/print`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ padding: '6px 14px', background: '#111', color: 'white', borderRadius: 6, textDecoration: 'none', fontSize: 13, fontWeight: 500 }}
-              >
-                🖨️ Print Setlist
-              </a>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <a
+                  href={`/projects/${projectId}/shows/${show.id}/setlist/print`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ padding: '6px 14px', background: '#111', color: 'white', borderRadius: 6, textDecoration: 'none', fontSize: 13, fontWeight: 500 }}
+                >
+                  🖨️ Print Setlist
+                </a>
+                <a
+                  href={`/projects/${projectId}/shows/${show.id}/setlist/print/personal`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ padding: '6px 14px', background: hasPersonalNotes ? '#6c47ff' : '#888', color: 'white', borderRadius: 6, textDecoration: 'none', fontSize: 13, fontWeight: 500 }}
+                  title={hasPersonalNotes ? 'Print with your personal notes' : 'No personal notes yet — prints standard setlist'}
+                >
+                  🖨️ My Copy
+                </a>
+              </div>
             )}
           </div>
 
@@ -409,93 +501,99 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
                   <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
                     <label style={{ fontSize: 12, color: '#666' }}>Set #</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={newSong.set}
-                      onChange={(e) => setNewSong({ ...newSong, set: parseInt(e.target.value) || 1 })}
-                      style={{ ...inputStyle, width: 64 }}
-                    />
+                    <input type="number" min={1} max={10} value={newSong.set} onChange={(e) => setNewSong({ ...newSong, set: parseInt(e.target.value) || 1 })} style={{ ...inputStyle, width: 64 }} />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4, flex: 1, minWidth: 100 }}>
                     <label style={{ fontSize: 12, color: '#666' }}>Key</label>
-                    <input
-                      placeholder="e.g. G, Am, Bb"
-                      value={newSong.key}
-                      onChange={(e) => setNewSong({ ...newSong, key: e.target.value })}
-                      style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' as const }}
-                    />
+                    <input placeholder="e.g. G, Am, Bb" value={newSong.key} onChange={(e) => setNewSong({ ...newSong, key: e.target.value })} style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' as const }} />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4, flex: 2, minWidth: 160 }}>
                     <label style={{ fontSize: 12, color: '#666' }}>Notes</label>
-                    <input
-                      placeholder="e.g. capo 2, starts slow"
-                      value={newSong.notes}
-                      onChange={(e) => setNewSong({ ...newSong, notes: e.target.value })}
-                      style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' as const }}
-                    />
+                    <input placeholder="e.g. capo 2, starts slow" value={newSong.notes} onChange={(e) => setNewSong({ ...newSong, notes: e.target.value })} style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' as const }} />
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    id="uses_backing_track"
-                    checked={newSong.uses_backing_track}
-                    onChange={(e) => setNewSong({ ...newSong, uses_backing_track: e.target.checked })}
-                    style={{ width: 16, height: 16, cursor: 'pointer' }}
-                  />
-                  <label htmlFor="uses_backing_track" style={{ fontSize: 13, cursor: 'pointer', color: '#444' }}>
-                    Uses backing track / sampled music
-                  </label>
+                  <input type="checkbox" id="uses_backing_track" checked={newSong.uses_backing_track} onChange={(e) => setNewSong({ ...newSong, uses_backing_track: e.target.checked })} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                  <label htmlFor="uses_backing_track" style={{ fontSize: 13, cursor: 'pointer', color: '#444' }}>Uses backing track / sampled music</label>
                 </div>
-                <button
-                  onClick={addSong}
-                  disabled={savingSetlist}
-                  style={{ padding: '8px 16px', background: savingSetlist ? '#999' : '#111', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: savingSetlist ? 'not-allowed' : 'pointer', alignSelf: 'flex-start' as const }}
-                >
+                <button onClick={addSong} disabled={savingSetlist} style={{ padding: '8px 16px', background: savingSetlist ? '#999' : '#111', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: savingSetlist ? 'not-allowed' : 'pointer', alignSelf: 'flex-start' as const }}>
                   Add Song
                 </button>
               </div>
             </div>
           )}
 
-          {/* Song list grouped by set */}
           {!setlistLoading && songs.length === 0 && (
-            <p style={{ fontSize: 14, color: '#888', fontStyle: 'italic' }}>
-              No songs yet.{canEdit && ' Add your first song above.'}
-            </p>
+            <p style={{ fontSize: 14, color: '#888', fontStyle: 'italic' }}>No songs yet.{canEdit && ' Add your first song above.'}</p>
           )}
 
+          {/* Song list grouped by set */}
           {setNumbers.map((setNum) => (
             <div key={setNum} style={{ marginBottom: 24 }}>
-              <div style={{
-                fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase',
-                letterSpacing: 1, marginBottom: 8, paddingBottom: 6,
-                borderBottom: '2px solid #eee',
-              }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8, paddingBottom: 6, borderBottom: '2px solid #eee' }}>
                 Set {setNum}
               </div>
               {songsBySet[setNum].map((song) => {
                 const index = songs.findIndex((s) => s === song)
+                const personalNote = personalNotes[song.order]
+                const isEditingThisSong = editingNote === song.order
+
                 return (
-                  <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f5f5f5' }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#ccc', minWidth: 24, textAlign: 'right' }}>{song.order}</div>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>{song.title}</span>
-                      {song.uses_backing_track && (
-                        <span style={{ marginLeft: 6, fontSize: 10, background: '#f0ecff', color: '#6c47ff', padding: '1px 5px', borderRadius: 3, fontWeight: 700 }}>BT</span>
-                      )}
-                      {song.key && <span style={{ marginLeft: 8, fontSize: 13, color: '#666' }}>{song.key}</span>}
-                      {song.notes && <span style={{ marginLeft: 8, fontSize: 12, color: '#999', fontStyle: 'italic' }}>{song.notes}</span>}
-                    </div>
-                    {canEdit && (
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button onClick={() => moveSong(index, 'up')} disabled={index === 0} style={{ padding: '2px 6px', fontSize: 11, cursor: index === 0 ? 'not-allowed' : 'pointer', opacity: index === 0 ? 0.3 : 1 }}>▲</button>
-                        <button onClick={() => moveSong(index, 'down')} disabled={index === songs.length - 1} style={{ padding: '2px 6px', fontSize: 11, cursor: index === songs.length - 1 ? 'not-allowed' : 'pointer', opacity: index === songs.length - 1 ? 0.3 : 1 }}>▼</button>
-                        <button onClick={() => removeSong(index)} style={{ padding: '2px 6px', fontSize: 11, color: '#c00', cursor: 'pointer' }}>✕</button>
+                  <div key={index} style={{ padding: '10px 0', borderBottom: '1px solid #f5f5f5' }}>
+                    {/* Song row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#ccc', minWidth: 24, textAlign: 'right' }}>{song.order}</div>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>{song.title}</span>
+                        {song.uses_backing_track && (
+                          <span style={{ marginLeft: 6, fontSize: 10, background: '#f0ecff', color: '#6c47ff', padding: '1px 5px', borderRadius: 3, fontWeight: 700 }}>BT</span>
+                        )}
+                        {song.key && <span style={{ marginLeft: 8, fontSize: 13, color: '#666' }}>{song.key}</span>}
+                        {song.notes && <span style={{ marginLeft: 8, fontSize: 12, color: '#999', fontStyle: 'italic' }}>{song.notes}</span>}
                       </div>
-                    )}
+                      {canEdit && (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button onClick={() => moveSong(index, 'up')} disabled={index === 0} style={{ padding: '2px 6px', fontSize: 11, cursor: index === 0 ? 'not-allowed' : 'pointer', opacity: index === 0 ? 0.3 : 1 }}>▲</button>
+                          <button onClick={() => moveSong(index, 'down')} disabled={index === songs.length - 1} style={{ padding: '2px 6px', fontSize: 11, cursor: index === songs.length - 1 ? 'not-allowed' : 'pointer', opacity: index === songs.length - 1 ? 0.3 : 1 }}>▼</button>
+                          <button onClick={() => removeSong(index)} style={{ padding: '2px 6px', fontSize: 11, color: '#c00', cursor: 'pointer' }}>✕</button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Personal note section */}
+                    <div style={{ marginLeft: 34, marginTop: 6 }}>
+                      {isEditingThisSong ? (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const }}>
+                          <input
+                            autoFocus
+                            placeholder="Your personal note…"
+                            value={noteInput}
+                            onChange={(e) => setNoteInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') savePersonalNote(song.order); if (e.key === 'Escape') cancelEditNote() }}
+                            style={{ ...inputStyle, fontSize: 13, flex: 1, minWidth: 200 }}
+                          />
+                          <button onClick={() => savePersonalNote(song.order)} disabled={savingNote} style={{ padding: '5px 12px', background: '#111', color: 'white', border: 'none', borderRadius: 5, fontSize: 12, cursor: 'pointer' }}>
+                            {savingNote ? 'Saving…' : 'Save'}
+                          </button>
+                          <button onClick={cancelEditNote} style={{ padding: '5px 10px', background: 'none', border: '1px solid #ddd', borderRadius: 5, fontSize: 12, cursor: 'pointer', color: '#666' }}>
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {personalNote ? (
+                            <>
+                              <span style={{ fontSize: 12, color: '#6c47ff', fontStyle: 'italic' }}>📝 {personalNote.notes}</span>
+                              <button onClick={() => startEditNote(song.order)} style={{ background: 'none', border: 'none', fontSize: 11, color: '#aaa', cursor: 'pointer', padding: 0 }}>Edit</button>
+                            </>
+                          ) : (
+                            <button onClick={() => startEditNote(song.order)} style={{ background: 'none', border: 'none', fontSize: 12, color: '#bbb', cursor: 'pointer', padding: 0 }}>
+                              + Add my note
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               })}
