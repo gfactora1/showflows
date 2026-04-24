@@ -39,7 +39,7 @@ export default function People({ projectId, myRole }: Props) {
 
   const canEdit = myRole === 'owner' || myRole === 'editor'
   const canDelete = myRole === 'owner'
-  const canManageAvailability = myRole === 'owner'
+  const canManageAvailability = myRole === 'owner' || myRole === 'editor'
 
   const loadPeople = async () => {
     const { data, error } = await supabase

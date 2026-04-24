@@ -11,6 +11,7 @@ import Venues from './Venues'
 import AvailabilityCalendar from './AvailabilityCalendar'
 import MemberShowsView from './MemberShowsView'
 import SongLibrary from './SongLibrary'
+import MemberAvailability from './MemberAvailability'
 
 type Project = {
   id: string
@@ -134,7 +135,7 @@ export default function ProjectDetail({ project, myRole }: Props) {
 
       {/* Member view */}
       {memberView && activeTab === 'shows' && <MemberShowsView projectId={project.id} />}
-      {memberView && activeTab === 'availability' && <AvailabilityCalendar projectId={project.id} />}
+      {memberView && activeTab === 'availability' && <MemberAvailability projectId={project.id} />}
 
       {/* Admin view */}
       {!memberView && activeTab === 'members' && <ProjectMembers project={project} />}
