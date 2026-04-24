@@ -52,9 +52,21 @@ export default function ProjectDetail({ project, myRole }: Props) {
   const [upgrading, setUpgrading] = useState(false)
   const [managingBilling, setManagingBilling] = useState(false)
   const [isPro, setIsPro] = useState<boolean | null>(null)
-  const [memberView, setMemberView] = useState(false)
 
+
+  // canToggle: owners/editors can switch views manually
   const canToggle = myRole === 'owner' || myRole === 'editor'
+  const isMemberOnly = myRole === 'member' || myRole === 'readonly'
+
+  // adminToggle: only meaningful for owners/editors who clicked the toggle button
+  const [adminToggle, setAdminToggle] = useState(false)
+
+  // Reset admin toggle when switching projects
+  useEffect(() => { setAdminToggle(false) }, [project.id])
+
+  // memberView is derived, not stored — no render lag possible
+  const memberView = isMemberOnly || adminToggle
+
   const effectiveRole: Role | null = memberView ? 'member' : myRole
 
   useEffect(() => {
@@ -96,13 +108,16 @@ export default function ProjectDetail({ project, myRole }: Props) {
     } catch { alert('Something went wrong. Please try again.'); setManagingBilling(false) }
   }
 
+  // Don't render anything until we know the user's role — prevents admin tab flash for members
+  if (myRole === null) return null
+
   return (
     <div>
-      {/* View toggle */}
+      {/* View toggle — owners and editors only */}
       {canToggle && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
           <button
-            onClick={() => setMemberView((v) => !v)}
+            onClick={() => setAdminToggle((v) => !v)}
             style={{ padding: '5px 14px', background: memberView ? '#f0f0f0' : 'none', border: '1px solid #ddd', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 6 }}
           >
             {memberView ? '⚙️ Switch to admin view' : '👤 Switch to member view'}
@@ -110,8 +125,8 @@ export default function ProjectDetail({ project, myRole }: Props) {
         </div>
       )}
 
-      {/* Member view banner */}
-      {memberView && (
+      {/* Member view banner — only shown to owners/editors who toggled, not to actual members */}
+      {memberView && canToggle && (
         <div style={{ background: '#f9f9f9', border: '1px solid #e5e5e5', borderRadius: 8, padding: '8px 14px', marginBottom: 16, fontSize: 13, color: '#888' }}>
           👤 Member view — you're seeing this project as a member would
         </div>
@@ -133,11 +148,11 @@ export default function ProjectDetail({ project, myRole }: Props) {
         })}
       </div>
 
-      {/* Member view */}
+      {/* Member view content */}
       {memberView && activeTab === 'shows' && <MemberShowsView projectId={project.id} />}
       {memberView && activeTab === 'availability' && <MemberAvailability projectId={project.id} />}
 
-      {/* Admin view */}
+      {/* Admin view content */}
       {!memberView && activeTab === 'members' && <ProjectMembers project={project} />}
       {!memberView && activeTab === 'shows' && <Shows projectId={project.id} myRole={effectiveRole} />}
       {!memberView && activeTab === 'people' && <People projectId={project.id} myRole={effectiveRole} />}

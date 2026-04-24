@@ -62,13 +62,14 @@ export default function People({ projectId, myRole }: Props) {
   const createPerson = async () => {
     setMsg('')
     if (!form.display_name.trim()) return setMsg('Name is required.')
+    if (!form.email.trim()) return setMsg('Email is required.')
 
     setLoading(true)
     try {
       const { error } = await supabase.from('people').insert({
         project_id: projectId,
         display_name: form.display_name.trim(),
-        email: form.email.trim() || null,
+        email: form.email.trim().toLowerCase(),
         phone: form.phone.trim() || null,
         is_active: true,
       })
@@ -101,6 +102,7 @@ export default function People({ projectId, myRole }: Props) {
   const saveEdit = async (id: string) => {
     setMsg('')
     if (!editForm.display_name.trim()) return setMsg('Name is required.')
+    if (!editForm.email.trim()) return setMsg('Email is required.')
 
     setLoading(true)
     try {
@@ -108,7 +110,7 @@ export default function People({ projectId, myRole }: Props) {
         .from('people')
         .update({
           display_name: editForm.display_name.trim(),
-          email: editForm.email.trim() || null,
+          email: editForm.email.trim().toLowerCase(),
           phone: editForm.phone.trim() || null,
         })
         .eq('id', id)
@@ -158,7 +160,8 @@ export default function People({ projectId, myRole }: Props) {
         style={{ padding: 8 }}
       />
       <input
-        placeholder="Email (optional)"
+        placeholder="Email"
+        type="email"
         value={values.email}
         onChange={(e) => set({ ...values, email: e.target.value })}
         style={{ padding: 8 }}
@@ -204,6 +207,9 @@ export default function People({ projectId, myRole }: Props) {
             )}
             {person.phone && (
               <div style={{ marginTop: 2, fontSize: 13, opacity: 0.75 }}>{person.phone}</div>
+            )}
+            {!person.email && (
+              <div style={{ marginTop: 3, fontSize: 12, color: '#c00' }}>⚠️ No email — member matching disabled</div>
             )}
             {!person.is_active && (
               <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>Inactive</div>

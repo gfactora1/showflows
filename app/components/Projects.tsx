@@ -43,6 +43,9 @@ export default function Projects() {
   }
 
   const loadMyRole = async (projectId: string) => {
+    // Reset immediately so ProjectDetail waits rather than flashing the wrong tabs
+    setMyRole(null)
+
     const { data: userData } = await supabase.auth.getUser()
     const email = userData?.user?.email?.trim().toLowerCase() ?? ''
     if (!email) return
