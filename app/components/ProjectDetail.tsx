@@ -10,6 +10,7 @@ import DefaultRoster from './DefaultRoster'
 import Venues from './Venues'
 import AvailabilityCalendar from './AvailabilityCalendar'
 import MemberShowsView from './MemberShowsView'
+import SongLibrary from './SongLibrary'
 
 type Project = {
   id: string
@@ -20,7 +21,7 @@ type Project = {
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
-type Tab = 'shows' | 'venues' | 'roster' | 'people' | 'roles' | 'providers' | 'members' | 'conflicts' | 'availability'
+type Tab = 'shows' | 'venues' | 'roster' | 'people' | 'roles' | 'providers' | 'songs' | 'availability' | 'conflicts' | 'members'
 
 const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: 'shows', label: 'Shows' },
@@ -29,6 +30,7 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: 'people', label: 'People' },
   { key: 'roles', label: 'Roles' },
   { key: 'providers', label: 'Providers' },
+  { key: 'songs', label: '🎵 Songs' },
   { key: 'availability', label: '📅 Availability' },
   { key: 'conflicts', label: '⚡ Conflicts' },
   { key: 'members', label: 'Members' },
@@ -65,18 +67,10 @@ export default function ProjectDetail({ project, myRole }: Props) {
   useEffect(() => {
     const fetchBilling = async () => {
       try {
-        const res = await fetch(`/api/projects/${project.id}/billing-status`, {
-          credentials: 'include',
-        })
-        if (res.ok) {
-          const data = await res.json()
-          setIsPro(data.isPro ?? false)
-        } else {
-          setIsPro(false)
-        }
-      } catch {
-        setIsPro(false)
-      }
+        const res = await fetch(`/api/projects/${project.id}/billing-status`, { credentials: 'include' })
+        if (res.ok) { const data = await res.json(); setIsPro(data.isPro ?? false) }
+        else setIsPro(false)
+      } catch { setIsPro(false) }
     }
     fetchBilling()
   }, [project.id])
@@ -84,67 +78,31 @@ export default function ProjectDetail({ project, myRole }: Props) {
   const handleUpgrade = async () => {
     setUpgrading(true)
     try {
-      const res = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id }),
-      })
+      const res = await fetch('/api/stripe/checkout', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: project.id }) })
       const data = await res.json()
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        alert(data.error ?? 'Something went wrong')
-        setUpgrading(false)
-      }
-    } catch {
-      alert('Something went wrong. Please try again.')
-      setUpgrading(false)
-    }
+      if (data.url) window.location.href = data.url
+      else { alert(data.error ?? 'Something went wrong'); setUpgrading(false) }
+    } catch { alert('Something went wrong. Please try again.'); setUpgrading(false) }
   }
 
   const handleManageBilling = async () => {
     setManagingBilling(true)
     try {
-      const res = await fetch('/api/stripe/portal', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id }),
-      })
+      const res = await fetch('/api/stripe/portal', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: project.id }) })
       const data = await res.json()
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        alert(data.error ?? 'Something went wrong')
-        setManagingBilling(false)
-      }
-    } catch {
-      alert('Something went wrong. Please try again.')
-      setManagingBilling(false)
-    }
+      if (data.url) window.location.href = data.url
+      else { alert(data.error ?? 'Something went wrong'); setManagingBilling(false) }
+    } catch { alert('Something went wrong. Please try again.'); setManagingBilling(false) }
   }
 
   return (
     <div>
-      {/* View toggle — owners and editors only */}
+      {/* View toggle */}
       {canToggle && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
           <button
             onClick={() => setMemberView((v) => !v)}
-            style={{
-              padding: '5px 14px',
-              background: memberView ? '#f0f0f0' : 'none',
-              border: '1px solid #ddd',
-              borderRadius: 20,
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: 'pointer',
-              color: '#555',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
+            style={{ padding: '5px 14px', background: memberView ? '#f0f0f0' : 'none', border: '1px solid #ddd', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer', color: '#555', display: 'flex', alignItems: 'center', gap: 6 }}
           >
             {memberView ? '⚙️ Switch to admin view' : '👤 Switch to member view'}
           </button>
@@ -153,15 +111,7 @@ export default function ProjectDetail({ project, myRole }: Props) {
 
       {/* Member view banner */}
       {memberView && (
-        <div style={{
-          background: '#f9f9f9',
-          border: '1px solid #e5e5e5',
-          borderRadius: 8,
-          padding: '8px 14px',
-          marginBottom: 16,
-          fontSize: 13,
-          color: '#888',
-        }}>
+        <div style={{ background: '#f9f9f9', border: '1px solid #e5e5e5', borderRadius: 8, padding: '8px 14px', marginBottom: 16, fontSize: 13, color: '#888' }}>
           👤 Member view — you're seeing this project as a member would
         </div>
       )}
@@ -174,17 +124,7 @@ export default function ProjectDetail({ project, myRole }: Props) {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              style={{
-                padding: '8px 16px',
-                border: 'none',
-                borderBottom: isActive ? '2px solid #333' : '2px solid transparent',
-                marginBottom: -2,
-                background: 'none',
-                cursor: 'pointer',
-                fontWeight: isActive ? 600 : 400,
-                fontSize: 14,
-                color: isActive ? '#111' : '#666',
-              }}
+              style={{ padding: '8px 16px', border: 'none', borderBottom: isActive ? '2px solid #333' : '2px solid transparent', marginBottom: -2, background: 'none', cursor: 'pointer', fontWeight: isActive ? 600 : 400, fontSize: 14, color: isActive ? '#111' : '#666' }}
             >
               {tab.label}
             </button>
@@ -192,11 +132,11 @@ export default function ProjectDetail({ project, myRole }: Props) {
         })}
       </div>
 
-      {/* Member view content */}
+      {/* Member view */}
       {memberView && activeTab === 'shows' && <MemberShowsView projectId={project.id} />}
       {memberView && activeTab === 'availability' && <AvailabilityCalendar projectId={project.id} />}
 
-      {/* Admin view content */}
+      {/* Admin view */}
       {!memberView && activeTab === 'members' && <ProjectMembers project={project} />}
       {!memberView && activeTab === 'shows' && <Shows projectId={project.id} myRole={effectiveRole} />}
       {!memberView && activeTab === 'people' && <People projectId={project.id} myRole={effectiveRole} />}
@@ -204,72 +144,31 @@ export default function ProjectDetail({ project, myRole }: Props) {
       {!memberView && activeTab === 'providers' && <Providers projectId={project.id} myRole={effectiveRole} />}
       {!memberView && activeTab === 'roster' && <DefaultRoster projectId={project.id} myRole={effectiveRole} />}
       {!memberView && activeTab === 'venues' && <Venues projectId={project.id} myRole={effectiveRole} />}
+      {!memberView && activeTab === 'songs' && <SongLibrary projectId={project.id} myRole={effectiveRole} />}
       {!memberView && activeTab === 'availability' && <AvailabilityCalendar projectId={project.id} />}
 
       {!memberView && activeTab === 'conflicts' && (
         <section>
           <h3 style={{ marginTop: 0 }}>Conflict Intelligence</h3>
           <p style={{ opacity: 0.75, maxWidth: 520, marginBottom: 20 }}>
-            {isPro
-              ? 'Pro is active — conflict detection is running for your upcoming shows.'
-              : 'Pro feature — detects scheduling conflicts, missing required roles, and missing sound providers across your upcoming shows.'}
+            {isPro ? 'Pro is active — conflict detection is running for your upcoming shows.' : 'Pro feature — detects scheduling conflicts, missing required roles, and missing sound providers across your upcoming shows.'}
           </p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            <a
-              href={`/projects/${project.id}/conflicts`}
-              style={{
-                display: 'inline-block',
-                padding: '10px 20px',
-                background: '#111',
-                color: 'white',
-                borderRadius: 8,
-                textDecoration: 'none',
-                fontSize: 14,
-                fontWeight: 500,
-              }}
-            >
+            <a href={`/projects/${project.id}/conflicts`} style={{ display: 'inline-block', padding: '10px 20px', background: '#111', color: 'white', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 500 }}>
               Open Conflict Intelligence →
             </a>
             {myRole === 'owner' && isPro === false && (
-              <button
-                onClick={handleUpgrade}
-                disabled={upgrading}
-                style={{
-                  padding: '10px 20px',
-                  background: upgrading ? '#999' : '#6c47ff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: upgrading ? 'not-allowed' : 'pointer',
-                }}
-              >
+              <button onClick={handleUpgrade} disabled={upgrading} style={{ padding: '10px 20px', background: upgrading ? '#999' : '#6c47ff', color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: upgrading ? 'not-allowed' : 'pointer' }}>
                 {upgrading ? 'Redirecting...' : '⚡ Upgrade to Pro'}
               </button>
             )}
             {myRole === 'owner' && isPro === true && (
-              <button
-                onClick={handleManageBilling}
-                disabled={managingBilling}
-                style={{
-                  padding: '10px 20px',
-                  background: managingBilling ? '#999' : '#111',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 500,
-                  cursor: managingBilling ? 'not-allowed' : 'pointer',
-                }}
-              >
+              <button onClick={handleManageBilling} disabled={managingBilling} style={{ padding: '10px 20px', background: managingBilling ? '#999' : '#111', color: 'white', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: managingBilling ? 'not-allowed' : 'pointer' }}>
                 {managingBilling ? 'Redirecting...' : 'Manage Subscription'}
               </button>
             )}
           </div>
-          <p style={{ marginTop: 16, fontSize: 13, opacity: 0.6 }}>
-            Opens in full view. Use your browser back button to return here.
-          </p>
+          <p style={{ marginTop: 16, fontSize: 13, opacity: 0.6 }}>Opens in full view. Use your browser back button to return here.</p>
         </section>
       )}
     </div>
