@@ -22,11 +22,12 @@ function formatShowDate(iso: string) {
   })
 }
 
-function getFontSizes(totalSongs: number) {
-  if (totalSongs <= 8) return { title: 26, meta: 14, setHeader: 13, songTitle: 22, songDetail: 14, padding: 10 }
-  if (totalSongs <= 12) return { title: 24, meta: 13, setHeader: 12, songTitle: 18, songDetail: 13, padding: 8 }
-  if (totalSongs <= 18) return { title: 22, meta: 12, setHeader: 11, songTitle: 15, songDetail: 12, padding: 6 }
-  return { title: 20, meta: 11, setHeader: 10, songTitle: 13, songDetail: 11, padding: 5 }
+// Font size scales down toward 28px minimum based on songs in a set
+function getSongFontSize(songsInSet: number): number {
+  if (songsInSet <= 8) return 36
+  if (songsInSet <= 10) return 32
+  if (songsInSet <= 13) return 30
+  return 28 // minimum — never go below this
 }
 
 export default async function SetlistPrintPage({ params }: Props) {
@@ -66,9 +67,6 @@ export default async function SetlistPrintPage({ params }: Props) {
   const { data: setlist } = await supabase.from('setlists').select('songs').eq('show_id', showId).maybeSingle()
   const songs: Song[] = (setlist?.songs ?? []) as Song[]
 
-  const totalSongs = songs.length
-  const fs = getFontSizes(totalSongs)
-
   // Group by set
   const songsBySet = songs.reduce((acc, song) => {
     const setNum = song.set || 1
@@ -80,67 +78,70 @@ export default async function SetlistPrintPage({ params }: Props) {
   const setNumbers = Object.keys(songsBySet).map(Number).sort((a, b) => a - b)
   const multiplesets = setNumbers.length > 1
 
+  // Build compact one-line header string
+  const headerParts = [show.title, venueName, formatShowDate(show.starts_at)].filter(Boolean)
+  const headerLine = headerParts.join(' · ')
+
   const css = `
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
       font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
       background: white;
       color: black;
-      padding: 32px 40px;
     }
-    .header {
-      border-bottom: 3px solid black;
-      padding-bottom: 12px;
-      margin-bottom: 20px;
+
+    .set-page {
+      padding: 24px 36px 24px 36px;
+      min-height: 100vh;
     }
-    .show-title {
-      font-size: ${fs.title}px;
-      font-weight: 900;
-      line-height: 1.1;
-      margin-bottom: 4px;
-    }
-    .show-meta {
-      font-size: ${fs.meta}px;
-      color: #333;
-      line-height: 1.5;
-    }
-    .set-header {
-      font-size: ${fs.setHeader}px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
+
+    .page-header {
+      font-size: 11px;
       color: #555;
-      padding: ${fs.padding}px 0 4px 0;
-      border-bottom: 2px solid #333;
-      margin-bottom: 2px;
-      margin-top: 14px;
+      letter-spacing: 0.3px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid black;
+      margin-bottom: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .set-header:first-child { margin-top: 0; }
+
+    .set-label {
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
     .song-row {
       display: flex;
       align-items: baseline;
-      gap: 10px;
-      padding: ${fs.padding}px 0;
-      border-bottom: 1px solid #e0e0e0;
-      line-height: 1.3;
+      gap: 12px;
+      padding: 6px 0;
+      border-bottom: 1px solid #ddd;
+      break-inside: avoid;
     }
+
     .song-num {
-      font-size: ${fs.songDetail}px;
       font-weight: 700;
-      color: #aaa;
-      min-width: 24px;
+      color: #bbb;
+      min-width: 28px;
       text-align: right;
       flex-shrink: 0;
     }
+
     .song-title {
-      font-size: ${fs.songTitle}px;
-      font-weight: 800;
+      font-weight: 900;
       flex-shrink: 0;
     }
+
     .bt-badge {
       display: inline-block;
-      font-size: ${Math.max(fs.songDetail - 2, 9)}px;
-      font-weight: 800;
+      font-weight: 900;
       background: #111;
       color: white;
       padding: 1px 5px;
@@ -150,35 +151,49 @@ export default async function SetlistPrintPage({ params }: Props) {
       letter-spacing: 0.5px;
       flex-shrink: 0;
     }
+
     .song-key {
-      font-size: ${fs.songDetail}px;
-      font-weight: 600;
+      font-weight: 700;
       color: #333;
       flex-shrink: 0;
     }
+
     .song-notes {
-      font-size: ${fs.songDetail - 1}px;
-      color: #666;
+      color: #555;
       font-style: italic;
       flex: 1;
     }
-    .song-count {
-      margin-top: 16px;
-      font-size: ${fs.meta}px;
-      color: #aaa;
-      text-align: right;
-    }
+
     .no-songs {
       font-size: 18px;
       color: #888;
       margin-top: 24px;
       font-style: italic;
     }
+
+    .print-tip {
+      margin-top: 20px;
+      font-size: 11px;
+      color: #aaa;
+      font-style: italic;
+    }
+
     @media print {
       .no-print { display: none !important; }
-      body { padding: 20px 28px; }
+      .print-tip { display: none !important; }
+
+      .set-page {
+       padding: 16px 28px;
+       min-height: auto;
+      }
+
+      .set-page + .set-page {
+        page-break-before: always;
+        break-before: page;
+      }
+
       .song-row { break-inside: avoid; }
-      .set-header { break-after: avoid; }
+      .set-label { break-after: avoid; }
     }
   `
 
@@ -187,35 +202,52 @@ export default async function SetlistPrintPage({ params }: Props) {
       <style>{css}</style>
       <PrintButton />
 
-      <div className="header">
-        <div className="show-title">{show.title}</div>
-        <div className="show-meta">
-          {venueName && <div>{venueName}</div>}
-          <div>{formatShowDate(show.starts_at)}</div>
-        </div>
-      </div>
-
       {songs.length === 0 ? (
-        <div className="no-songs">No songs added to this setlist yet.</div>
+        <div className="set-page">
+          <div className="page-header">{headerLine}</div>
+          <div className="no-songs">No songs added to this setlist yet.</div>
+        </div>
       ) : (
         <>
-          {setNumbers.map((setNum) => (
-            <div key={setNum}>
-              {multiplesets && (
-                <div className="set-header">Set {setNum}</div>
-              )}
-              {songsBySet[setNum].map((song, i) => (
-                <div key={i} className="song-row">
-                  <div className="song-num">{song.order}</div>
-                  <div className="song-title">{song.title}</div>
-                  {song.uses_backing_track && <span className="bt-badge">BT</span>}
-                  {song.key && <div className="song-key">{song.key}</div>}
-                  {song.notes && <div className="song-notes">{song.notes}</div>}
-                </div>
-              ))}
-            </div>
-          ))}
-          <div className="song-count">{totalSongs} song{totalSongs !== 1 ? 's' : ''}</div>
+          {setNumbers.map((setNum) => {
+            const setSongs = songsBySet[setNum]
+            const songFontSize = getSongFontSize(setSongs.length)
+            const detailFontSize = Math.round(songFontSize * 0.52)
+            const numFontSize = Math.round(songFontSize * 0.48)
+            const btFontSize = Math.max(detailFontSize - 2, 9)
+
+            return (
+              <div key={setNum} className="set-page">
+                <div className="page-header">{headerLine}</div>
+                {multiplesets && (
+                  <div className="set-label">Set {setNum}</div>
+                )}
+                {setSongs.map((song, i) => (
+                  <div
+                    key={i}
+                    className="song-row"
+                    style={{ fontSize: songFontSize }}
+                  >
+                    <div className="song-num" style={{ fontSize: numFontSize }}>{song.order}</div>
+                    <div className="song-title" style={{ fontSize: songFontSize }}>{song.title}</div>
+                    {song.uses_backing_track && (
+                      <span className="bt-badge" style={{ fontSize: btFontSize }}>BT</span>
+                    )}
+                    {song.key && (
+                      <div className="song-key" style={{ fontSize: detailFontSize }}>{song.key}</div>
+                    )}
+                    {song.notes && (
+                      <div className="song-notes" style={{ fontSize: detailFontSize }}>{song.notes}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+
+          <p className="print-tip no-print">
+            Tip: To hide the browser URL and page numbers when printing, open your browser's print dialog and turn off "Headers and footers."
+          </p>
         </>
       )}
     </>
