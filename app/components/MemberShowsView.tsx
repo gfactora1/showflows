@@ -14,6 +14,8 @@ type Show = {
   starts_at: string
   ends_at: string
   venue_name: string | null
+  venue_city: string | null
+  venue_state: string | null
   role_name: string | null
   is_confirmed: boolean
 }
@@ -44,6 +46,11 @@ function formatShowTime(iso: string) {
   })
 }
 
+function mapsUrl(name: string | null, city: string | null, state: string | null) {
+  const parts = [name, city, state].filter(Boolean).join(', ')
+  return `https://maps.google.com/?q=${encodeURIComponent(parts)}`
+}
+
 export default function MemberShowsView({ projectId }: Props) {
   const now = new Date()
   const [viewYear, setViewYear] = useState(now.getFullYear())
@@ -66,13 +73,11 @@ export default function MemberShowsView({ projectId }: Props) {
     const lastDay = toDateStr(year, month, new Date(year, month + 1, 0).getDate())
 
     try {
-      // 1. Get logged-in user's email
       const { data: { user } } = await supabase.auth.getUser()
       if (!user?.email) throw new Error('Not logged in.')
 
       const userEmail = user.email.trim().toLowerCase()
 
-      // 2. Find their people record in this project by email
       const { data: personData } = await supabase
         .from('people')
         .select('id')
@@ -82,10 +87,9 @@ export default function MemberShowsView({ projectId }: Props) {
 
       if (!personData) {
         setNoPersonFound(true)
-        // Fall back to showing all project shows (no assignment_id available)
         const { data: allShows, error: allShowsError } = await supabase
           .from('shows')
-          .select('id, title, starts_at, ends_at, venues(name)')
+          .select('id, title, starts_at, ends_at, venues(name, city, state)')
           .eq('project_id', projectId)
           .gte('starts_at', firstDay + 'T00:00:00Z')
           .lte('starts_at', lastDay + 'T23:59:59Z')
@@ -100,6 +104,8 @@ export default function MemberShowsView({ projectId }: Props) {
           starts_at: s.starts_at,
           ends_at: s.ends_at,
           venue_name: s.venues?.name ?? null,
+          venue_city: s.venues?.city ?? null,
+          venue_state: s.venues?.state ?? null,
           role_name: null,
           is_confirmed: false,
         })))
@@ -109,7 +115,6 @@ export default function MemberShowsView({ projectId }: Props) {
 
       setNoPersonFound(false)
 
-      // 3. Get their assignments (including the assignment id for toggling)
       const { data: assignmentData, error: assignError } = await supabase
         .from('show_assignments')
         .select('id, show_id, is_confirmed, roles(name)')
@@ -134,10 +139,9 @@ export default function MemberShowsView({ projectId }: Props) {
 
       const showIds = assignmentData.map((a: any) => a.show_id)
 
-      // 4. Load show details for those assignments in this month
       const { data: showData, error: showError } = await supabase
         .from('shows')
-        .select('id, title, starts_at, ends_at, venues(name)')
+        .select('id, title, starts_at, ends_at, venues(name, city, state)')
         .in('id', showIds)
         .gte('starts_at', firstDay + 'T00:00:00Z')
         .lte('starts_at', lastDay + 'T23:59:59Z')
@@ -154,6 +158,8 @@ export default function MemberShowsView({ projectId }: Props) {
           starts_at: s.starts_at,
           ends_at: s.ends_at,
           venue_name: s.venues?.name ?? null,
+          venue_city: s.venues?.city ?? null,
+          venue_state: s.venues?.state ?? null,
           role_name: assignment?.role_name ?? null,
           is_confirmed: assignment?.is_confirmed ?? false,
         }
@@ -205,16 +211,11 @@ export default function MemberShowsView({ projectId }: Props) {
     setToggling(null)
   }
 
-  // Build set of dates that have shows
-  const showDates = new Set(
-    shows.map((s) => s.starts_at.split('T')[0])
-  )
-
+  const showDates = new Set(shows.map((s) => s.starts_at.split('T')[0]))
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay()
   const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-  // Shows for selected date or all shows if no date selected
   const displayedShows = selectedDate
     ? shows.filter((s) => s.starts_at.split('T')[0] === selectedDate)
     : shows
@@ -284,9 +285,7 @@ export default function MemberShowsView({ projectId }: Props) {
           return (
             <div
               key={dateStr}
-              onClick={() => {
-                if (hasShow) setSelectedDate(isSelected ? null : dateStr)
-              }}
+              onClick={() => { if (hasShow) setSelectedDate(isSelected ? null : dateStr) }}
               style={{
                 aspectRatio: '1',
                 display: 'flex',
@@ -294,18 +293,8 @@ export default function MemberShowsView({ projectId }: Props) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: 6,
-                border: isSelected
-                  ? '2px solid #111'
-                  : hasShow
-                  ? '1.5px solid #6c47ff'
-                  : '1.5px solid #eee',
-                background: isSelected
-                  ? '#111'
-                  : hasShow
-                  ? '#f0ecff'
-                  : isPast
-                  ? '#fafafa'
-                  : 'white',
+                border: isSelected ? '2px solid #111' : hasShow ? '1.5px solid #6c47ff' : '1.5px solid #eee',
+                background: isSelected ? '#111' : hasShow ? '#f0ecff' : isPast ? '#fafafa' : 'white',
                 cursor: hasShow ? 'pointer' : 'default',
               }}
             >
@@ -349,6 +338,7 @@ export default function MemberShowsView({ projectId }: Props) {
       {displayedShows.map((show) => {
         const isToggling = toggling === show.assignment_id
         const canToggle = !!show.assignment_id && !noPersonFound
+        const hasVenueLocation = show.venue_name || show.venue_city
 
         return (
           <div
@@ -379,8 +369,18 @@ export default function MemberShowsView({ projectId }: Props) {
             </div>
 
             {show.venue_name && (
-              <div style={{ fontSize: 13, color: '#666', marginTop: 4 }}>
-                📍 {show.venue_name}
+              <div style={{ fontSize: 13, color: '#666', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>📍 {show.venue_name}{show.venue_city ? ` — ${[show.venue_city, show.venue_state].filter(Boolean).join(', ')}` : ''}</span>
+                {hasVenueLocation && (
+                  <a
+                    href={mapsUrl(show.venue_name, show.venue_city, show.venue_state)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: 12, color: '#0070f3', textDecoration: 'none' }}
+                  >
+                    Get directions
+                  </a>
+                )}
               </div>
             )}
 
@@ -394,7 +394,6 @@ export default function MemberShowsView({ projectId }: Props) {
               </div>
             )}
 
-            {/* Confirm / Unconfirm button */}
             {canToggle && (
               <button
                 onClick={() => toggleAttendance(show)}
@@ -402,30 +401,16 @@ export default function MemberShowsView({ projectId }: Props) {
                 style={{
                   marginTop: 12,
                   padding: '7px 16px',
-                  background: isToggling
-                    ? '#999'
-                    : show.is_confirmed
-                    ? 'white'
-                    : '#111',
-                  color: isToggling
-                    ? 'white'
-                    : show.is_confirmed
-                    ? '#c00'
-                    : 'white',
-                  border: show.is_confirmed && !isToggling
-                    ? '1px solid #f0c0c0'
-                    : '1px solid transparent',
+                  background: isToggling ? '#999' : show.is_confirmed ? 'white' : '#111',
+                  color: isToggling ? 'white' : show.is_confirmed ? '#c00' : 'white',
+                  border: show.is_confirmed && !isToggling ? '1px solid #f0c0c0' : '1px solid transparent',
                   borderRadius: 6,
                   fontSize: 13,
                   fontWeight: 600,
                   cursor: isToggling ? 'not-allowed' : 'pointer',
                 }}
               >
-                {isToggling
-                  ? 'Updating…'
-                  : show.is_confirmed
-                  ? 'Cancel attendance'
-                  : 'Confirm attendance'}
+                {isToggling ? 'Updating…' : show.is_confirmed ? 'Cancel attendance' : 'Confirm attendance'}
               </button>
             )}
           </div>

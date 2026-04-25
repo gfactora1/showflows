@@ -230,7 +230,6 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
 
       if (error) throw error
 
-      // Fire conflict notification in background — don't block the UI
       if (user) {
         fetch(`/api/projects/${projectId}/notify-assignment-conflict`, {
           method: 'POST',
@@ -280,7 +279,6 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
     if (error) {
       setMsg(`Error updating: ${error.message}`)
     } else {
-      // Optimistic update — no need to refetch the whole table
       setAssignments((prev) =>
         prev.map((a) =>
           a.id === assignment.id ? { ...a, is_confirmed: newValue } : a
@@ -354,8 +352,29 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
         </div>
       )}
 
-      <div style={{ fontSize: 14, opacity: 0.75, marginBottom: 16 }}>
+      <div style={{ fontSize: 14, opacity: 0.75, marginBottom: 12 }}>
         {formatDisplay(show.starts_at)} → {formatDisplay(show.ends_at)}
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <a
+          href={`/projects/${show.project_id}/shows/${show.id}/setlist/print`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: 13,
+            color: '#555',
+            textDecoration: 'none',
+            border: '1px solid #ddd',
+            borderRadius: 6,
+            padding: '5px 12px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          🖨️ Print Setlist
+        </a>
       </div>
 
       <hr style={{ margin: '16px 0', borderColor: '#eee' }} />
@@ -488,11 +507,7 @@ export default function ShowDetail({ show, projectId, myRole, onBack }: Props) {
                           border: `1px solid ${isToggling ? '#e0e0e0' : a.is_confirmed ? '#b2f0c8' : '#e5e5e5'}`,
                         }}
                       >
-                        {isToggling
-                          ? '…'
-                          : a.is_confirmed
-                          ? '✓ Confirmed'
-                          : 'Unconfirmed'}
+                        {isToggling ? '…' : a.is_confirmed ? '✓ Confirmed' : 'Unconfirmed'}
                       </button>
                     ) : (
                       <span style={{
