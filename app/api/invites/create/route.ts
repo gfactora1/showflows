@@ -49,7 +49,12 @@ function buildInviteEmail({
   const html = `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px">
       <div style="margin-bottom:24px">
-        <span style="font-size:22px;font-weight:700;letter-spacing:-0.5px">ShowFlows</span>
+        <img
+          src="https://showflows.net/logo.png"
+          alt="ShowFlows"
+          width="140"
+          style="height:auto;display:block"
+        />
       </div>
 
       <h2 style="font-size:20px;font-weight:700;margin:0 0 8px 0">
@@ -125,7 +130,6 @@ export async function POST(req: Request) {
     }
 
     const actorEmail = normalizeEmail(user.email);
-    const actorName = (user.user_metadata?.full_name ?? user.user_metadata?.name ?? actorEmail) as string;
 
     // AuthZ
     const { data: memberRow, error: memberErr } = await supabase
@@ -202,7 +206,7 @@ export async function POST(req: Request) {
     const { subject, html } = buildInviteEmail({
       invitedEmail,
       projectName,
-      inviterEmail: actorName,
+      inviterEmail: actorEmail,
       role,
       acceptUrl,
     });

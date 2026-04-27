@@ -2,77 +2,60 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { colors, radius, font, transition } from './tokens'
+
+// ── Token usage in this component ────────────────────────────────────────────
+//  textPrimary   → section title, "Preview" button text, ghost button labels
+//  textSecondary → card section labels ("WEB CALENDAR"), description text
+//  textMuted     → helper / instructional text (Apple/Google instructions)
+//  textUrl       → URL input text — brighter than primary to signal "copy me"
+//  red           → "Revoke link" — destructive, fontWeight 500
 
 export default function CalendarShare() {
-  const [token, setToken] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [token, setToken]           = useState<string | null>(null)
+  const [loading, setLoading]       = useState(true)
   const [generating, setGenerating] = useState(false)
-  const [revoking, setRevoking] = useState(false)
-  const [copied, setCopied] = useState<'web' | 'ical' | null>(null)
-  const [msg, setMsg] = useState('')
-  const [expanded, setExpanded] = useState(false)
+  const [revoking, setRevoking]     = useState(false)
+  const [copied, setCopied]         = useState<'web' | 'ical' | null>(null)
+  const [msg, setMsg]               = useState('')
+  const [expanded, setExpanded]     = useState(false)  // collapsed by default
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
-  const webUrl = token ? `${baseUrl}/cal/${token}` : ''
+  const webUrl  = token ? `${baseUrl}/cal/${token}` : ''
   const icalUrl = token ? `${baseUrl}/api/cal/${token}/ical` : ''
 
-  useEffect(() => {
-    loadToken()
-  }, [])
+  useEffect(() => { loadToken() }, [])
 
   const loadToken = async () => {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
-
     const { data } = await supabase
-      .from('calendar_shares')
-      .select('id')
-      .eq('auth_user_id', user.id)
-      .eq('revoked', false)
-      .maybeSingle()
-
+      .from('calendar_shares').select('id')
+      .eq('auth_user_id', user.id).eq('revoked', false).maybeSingle()
     setToken(data?.id ?? null)
     setLoading(false)
   }
 
   const generateToken = async () => {
-    setGenerating(true)
-    setMsg('')
+    setGenerating(true); setMsg('')
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
     const { data, error } = await supabase
-      .from('calendar_shares')
-      .insert({ auth_user_id: user.id })
-      .select('id')
-      .single()
-
-    if (error) {
-      setMsg('Error generating link. Try again.')
-    } else {
-      setToken(data.id)
-    }
+      .from('calendar_shares').insert({ auth_user_id: user.id }).select('id').single()
+    if (error) setMsg('Error generating link. Try again.')
+    else setToken(data.id)
     setGenerating(false)
   }
 
   const revokeToken = async () => {
     if (!token) return
-    if (!confirm('This will permanently break your current shareable link. Anyone using it will lose access. Generate a new one to reshare.\n\nContinue?')) return
-
-    setRevoking(true)
-    setMsg('')
-
+    if (!confirm('This will permanently break your current shareable link. Anyone using it will lose access.\n\nContinue?')) return
+    setRevoking(true); setMsg('')
     const { error } = await supabase
-      .from('calendar_shares')
-      .update({ revoked: true })
-      .eq('id', token)
-
-    if (error) {
-      setMsg('Error revoking link. Try again.')
-    } else {
-      setToken(null)
-    }
+      .from('calendar_shares').update({ revoked: true }).eq('id', token)
+    if (error) setMsg('Error revoking link. Try again.')
+    else setToken(null)
     setRevoking(false)
   }
 
@@ -89,40 +72,124 @@ export default function CalendarShare() {
 
   if (loading) return null
 
-  return (
-    <div style={{ marginTop: 40, paddingTop: 32, borderTop: '1px solid #eee' }}>
+  // ── Element styles ────────────────────────────────────────────────────────
 
-      {/* Clickable header row */}
-      <div
+  const cardStyle: React.CSSProperties = {
+    background: colors.card,
+    border: `1px solid ${colors.border}`,
+    borderRadius: radius.lg,
+    padding: '16px',
+  }
+
+  // "WEB CALENDAR" / "ICAL FEED" — secondary, readable label not dominant heading
+  const sectionLabel: React.CSSProperties = {
+    fontSize: 10, fontWeight: 700,
+    letterSpacing: '0.1em', textTransform: 'uppercase',
+    color: colors.textSecondary,
+    marginBottom: 5,
+  }
+
+  // Description — secondary
+  const description: React.CSSProperties = {
+    fontSize: 13, color: colors.textSecondary,
+    lineHeight: 1.5, marginBottom: 12,
+  }
+
+  // Helper / instructional — muted (lowest priority)
+  const helper: React.CSSProperties = {
+    fontSize: 12, color: colors.textMuted,
+    lineHeight: 1.6, marginTop: 10, marginBottom: 0,
+  }
+
+  // URL field — near-white text on baseDeep background
+  // radius.md matches the card system; violet-tinted border signals "interactive field"
+  const urlInput: React.CSSProperties = {
+    flex: 1, minWidth: 0,
+    padding: '7px 11px',
+    background: colors.baseDeep,
+    border: `1px solid rgba(124,58,237,0.35)`,  // violet-tinted — intentional, not generic
+    borderRadius: radius.md,                      // matches card system (was sm/6px)
+    fontSize: 12,
+    fontFamily: 'monospace',
+    color: colors.textUrl,
+    outline: 'none',
+    letterSpacing: '0.01em',
+  }
+
+  // "Copy link" — primary action: violet fill
+  const copyBtn = (active: boolean): React.CSSProperties => ({
+    padding: '7px 16px',
+    background: active ? colors.green : colors.violet,
+    color: 'white', border: 'none',
+    borderRadius: radius.sm,
+    fontSize: 13, fontWeight: 600,
+    cursor: 'pointer', whiteSpace: 'nowrap',
+    transition: `background ${transition.normal}`,
+    fontFamily: font.sans,
+  })
+
+  // "Preview" — secondary action: textPrimary text + borderStrong = clearly clickable
+  // Distinct from "Copy link" but not passive/disabled
+  const previewBtn: React.CSSProperties = {
+    padding: '7px 14px',
+    background: 'transparent',
+    color: colors.textPrimary,       // #F0F2F8 — clearly readable, not ghosted
+    border: `1px solid ${colors.borderStrong}`,  // 15% white — visible border
+    borderRadius: radius.sm,
+    fontSize: 13, fontWeight: 500,
+    textDecoration: 'none', whiteSpace: 'nowrap',
+    fontFamily: font.sans,
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div style={{
+      marginTop: 64,
+      paddingTop: 40,
+      borderTop: `1px solid ${colors.border}`,
+      fontFamily: font.sans,
+    }}>
+
+      {/* Clickable header row — toggles expand/collapse */}
+      <button
         onClick={() => setExpanded((v) => !v)}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 8,
+          background: 'none',
+          border: 'none',
+          padding: 0,
           cursor: 'pointer',
-          userSelect: 'none',
-          marginBottom: expanded ? 4 : 0,
+          textAlign: 'left',
+          marginBottom: expanded ? 6 : 0,
         }}
       >
-        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+        <h2 style={{
+          fontSize: 16, fontWeight: 800,
+          color: colors.textPrimary,
+          margin: 0, letterSpacing: '-0.3px',
+        }}>
           📅 My Shareable Calendar
         </h2>
-        <span style={{ fontSize: 16, color: '#999', lineHeight: 1 }}>
-          {expanded ? '▲' : '▼'}
+        <span style={{
+          fontSize: 11,
+          color: colors.textMuted,
+          transition: `transform ${transition.normal}`,
+          display: 'inline-block',
+          transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+          marginTop: 1,
+        }}>
+          ▼
         </span>
-      </div>
-
-      {!expanded && (
-        <p style={{ fontSize: 13, color: '#999', margin: '4px 0 0', cursor: 'pointer' }} onClick={() => setExpanded(true)}>
-          {token ? 'Your shareable link is active.' : 'Share your schedule with anyone — no login required.'}
-        </p>
-      )}
+      </button>
 
       {/* Collapsible content */}
       {expanded && (
-        <>
-          <p style={{ fontSize: 14, color: '#666', marginBottom: 20, marginTop: 8 }}>
-            Share your show schedule with anyone — no login required. Great for keeping family and friends in the loop.
+        <div>
+          {/* Subtitle */}
+          <p style={{ fontSize: 13, color: colors.textSecondary, margin: '0 0 20px', lineHeight: 1.5 }}>
+            Share your show schedule with anyone — no login required.
           </p>
 
           {!token ? (
@@ -131,80 +198,53 @@ export default function CalendarShare() {
                 onClick={generateToken}
                 disabled={generating}
                 style={{
-                  padding: '10px 20px',
-                  background: generating ? '#999' : '#111',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
+                  padding: '8px 18px',
+                  background: generating ? colors.textDim : colors.violet,
+                  color: 'white', border: 'none',
+                  borderRadius: radius.md, fontSize: 13, fontWeight: 500,
                   cursor: generating ? 'not-allowed' : 'pointer',
+                  fontFamily: font.sans,
                 }}
               >
                 {generating ? 'Generating…' : 'Generate shareable link'}
               </button>
-              <p style={{ fontSize: 13, color: '#999', marginTop: 10 }}>
+              <p style={{ ...helper, marginTop: 10 }}>
                 Creates a private link only you can share. Revoke it anytime to cut off access.
               </p>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 560 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 560 }}>
 
-              {/* Web calendar link */}
-              <div style={{ border: '1px solid #e5e5e5', borderRadius: 10, padding: '14px 16px', background: '#fafafa' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#888', letterSpacing: 0.5, marginBottom: 6, textTransform: 'uppercase' }}>
-                  Web Calendar
-                </div>
-                <div style={{ fontSize: 13, color: '#444', marginBottom: 8 }}>
-                  A beautiful calendar page anyone can open in their browser.
-                </div>
+              {/* Web calendar */}
+              <div style={cardStyle}>
+                <div style={sectionLabel}>Web Calendar</div>
+                <div style={description}>A calendar page anyone can open in their browser.</div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    readOnly
-                    value={webUrl}
-                    style={{ flex: 1, padding: '7px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, color: '#555', background: 'white', fontFamily: 'monospace' }}
-                  />
-                  <button
-                    onClick={() => copyToClipboard('web')}
-                    style={{ padding: '7px 14px', background: copied === 'web' ? '#1a7a3a' : '#111', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background 0.2s' }}
-                  >
+                  <input readOnly value={webUrl} style={urlInput} />
+                  <button onClick={() => copyToClipboard('web')} style={copyBtn(copied === 'web')}>
                     {copied === 'web' ? '✓ Copied' : 'Copy link'}
                   </button>
-                  <a
-                    href={webUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ padding: '7px 14px', background: 'white', color: '#333', border: '1px solid #ddd', borderRadius: 6, fontSize: 13, textDecoration: 'none', whiteSpace: 'nowrap' }}
-                  >
+                  <a href={webUrl} target="_blank" rel="noopener noreferrer" style={previewBtn}>
                     Preview
                   </a>
                 </div>
               </div>
 
-              {/* iCal feed link */}
-              <div style={{ border: '1px solid #e5e5e5', borderRadius: 10, padding: '14px 16px', background: '#fafafa' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#888', letterSpacing: 0.5, marginBottom: 6, textTransform: 'uppercase' }}>
-                  iCal Feed
-                </div>
-                <div style={{ fontSize: 13, color: '#444', marginBottom: 8 }}>
+              {/* iCal feed */}
+              <div style={cardStyle}>
+                <div style={sectionLabel}>iCal Feed</div>
+                <div style={description}>
                   Subscribe in Apple Calendar, Google Calendar, or Outlook. Stays up to date automatically.
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input
-                    readOnly
-                    value={icalUrl}
-                    style={{ flex: 1, padding: '7px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, color: '#555', background: 'white', fontFamily: 'monospace' }}
-                  />
-                  <button
-                    onClick={() => copyToClipboard('ical')}
-                    style={{ padding: '7px 14px', background: copied === 'ical' ? '#1a7a3a' : '#111', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background 0.2s' }}
-                  >
+                  <input readOnly value={icalUrl} style={urlInput} />
+                  <button onClick={() => copyToClipboard('ical')} style={copyBtn(copied === 'ical')}>
                     {copied === 'ical' ? '✓ Copied' : 'Copy link'}
                   </button>
                 </div>
-                <p style={{ fontSize: 12, color: '#999', marginTop: 8, marginBottom: 0 }}>
-                  In Apple Calendar: File → New Calendar Subscription → paste the link above.
-                  In Google Calendar: Other calendars → From URL → paste the link above.
+                <p style={helper}>
+                  Apple Calendar: File → New Calendar Subscription → paste above.{' '}
+                  Google Calendar: Other calendars → From URL → paste above.
                 </p>
               </div>
 
@@ -213,17 +253,33 @@ export default function CalendarShare() {
                 <button
                   onClick={revokeToken}
                   disabled={revoking}
-                  style={{ background: 'none', border: 'none', fontSize: 13, color: revoking ? '#bbb' : '#c00', cursor: revoking ? 'not-allowed' : 'pointer', padding: 0 }}
+                  onMouseEnter={(e) => {
+                    if (!revoking) (e.currentTarget as HTMLButtonElement).style.textDecoration = 'underline'
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.textDecoration = 'none'
+                  }}
+                  style={{
+                    background: 'none', border: 'none', padding: 0,
+                    fontSize: 13, fontWeight: 600,
+                    fontFamily: font.sans,
+                    color: revoking ? colors.textMuted : colors.red,
+                    cursor: revoking ? 'not-allowed' : 'pointer',
+                    textDecoration: 'none',
+                    transition: `color ${transition.normal}`,
+                  }}
                 >
                   {revoking ? 'Revoking…' : 'Revoke link & generate new one'}
                 </button>
               </div>
+
             </div>
           )}
 
-          {msg && <p style={{ fontSize: 13, color: '#c00', marginTop: 8 }}>{msg}</p>}
-        </>
+          {msg && <p style={{ fontSize: 13, color: colors.red, marginTop: 10 }}>{msg}</p>}
+        </div>
       )}
+
     </div>
   )
 }

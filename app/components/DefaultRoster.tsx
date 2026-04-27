@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { colors, radius, font } from './tokens'
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
@@ -81,7 +82,6 @@ export default function DefaultRoster({ projectId, myRole }: Props) {
     setPeople(peopleList)
     setRoles(rolesList)
 
-    // Always reset selectedPersonId to the first available person
     const available = peopleList.filter(
       (p) => !rosterList.find((r) => r.person_id === p.id)
     )
@@ -158,19 +158,49 @@ export default function DefaultRoster({ projectId, myRole }: Props) {
     (p) => !roster.find((r) => r.person_id === p.id)
   )
 
+  // shared cell style for the table
+  const cellStyle: React.CSSProperties = {
+    padding: '10px 12px',
+    borderBottom: `1px solid ${colors.border}`,
+    fontSize: 14,
+    color: colors.textPrimary,
+    verticalAlign: 'middle',
+  }
+
+  const headerCellStyle: React.CSSProperties = {
+    padding: '8px 12px',
+    borderBottom: `1px solid ${colors.borderStrong}`,
+    fontSize: 11,
+    fontWeight: 600,
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    textAlign: 'left' as const,
+  }
+
   return (
-    <section>
-      <h3 style={{ marginTop: 0 }}>Default Roster</h3>
-      <p style={{ opacity: 0.75, marginTop: 0, marginBottom: 16, maxWidth: 560 }}>
+    <section style={{ fontFamily: font.sans }}>
+      <h3 style={{ marginTop: 0, marginBottom: 6, fontSize: 16, fontWeight: 600, color: colors.textPrimary }}>
+        Default Roster
+      </h3>
+      <p style={{ color: colors.textSecondary, marginTop: 0, marginBottom: 20, fontSize: 14, maxWidth: 560, lineHeight: 1.5 }}>
         Define the core lineup for this project. When a new show is created, these
         assignments will be pre-populated automatically. You can adjust per-show as needed.
       </p>
 
       {canEdit && (
-        <>
-          <h4 style={{ marginBottom: 8 }}>Add to Default Roster</h4>
+        <div style={{
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: radius.lg,
+          padding: '16px',
+          marginBottom: 24,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: colors.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Add to Default Roster
+          </div>
           {availablePeople.length === 0 ? (
-            <p style={{ opacity: 0.7 }}>
+            <p style={{ color: colors.textMuted, fontSize: 14, margin: 0 }}>
               All active people are already in the default roster.
             </p>
           ) : (
@@ -178,7 +208,8 @@ export default function DefaultRoster({ projectId, myRole }: Props) {
               <select
                 value={selectedPersonId}
                 onChange={(e) => setSelectedPersonId(e.target.value)}
-                style={{ padding: 8 }}
+                className="input-select"
+                style={{ fontFamily: font.sans, minWidth: 160 }}
               >
                 <option value="">— Select person —</option>
                 {availablePeople.map((p) => (
@@ -191,7 +222,8 @@ export default function DefaultRoster({ projectId, myRole }: Props) {
               <select
                 value={selectedRoleId}
                 onChange={(e) => setSelectedRoleId(e.target.value)}
-                style={{ padding: 8 }}
+                className="input-select"
+                style={{ fontFamily: font.sans, minWidth: 140 }}
               >
                 <option value="">No role</option>
                 {roles.map((r) => (
@@ -201,69 +233,89 @@ export default function DefaultRoster({ projectId, myRole }: Props) {
                 ))}
               </select>
 
-              <button onClick={addToRoster} disabled={loading || !selectedPersonId}>
+              <button
+                onClick={addToRoster}
+                disabled={loading || !selectedPersonId}
+                className="btn-primary"
+              >
                 {loading ? 'Adding…' : 'Add'}
               </button>
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
+      {msg && (
+        <p style={{ marginBottom: 16, fontSize: 13, color: colors.red }}>
+          {msg}
+        </p>
+      )}
 
-      <div style={{ marginTop: 24 }}>
+      <div>
         {roster.length === 0 ? (
-          <p style={{ opacity: 0.8 }}>
+          <p style={{ color: colors.textMuted, fontSize: 14 }}>
             No default roster yet — add your core players above.
           </p>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
-                  Person
-                </th>
-                <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
-                  Default Role
-                </th>
-                {canDelete && (
-                  <th style={{ borderBottom: '1px solid #ddd', padding: 8 }} />
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {roster.map((entry) => (
-                <tr key={entry.id}>
-                  <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-                    {entry.person?.display_name ?? '—'}
-                  </td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-                    {canEdit ? (
-                      <select
-                        value={entry.role_id ?? ''}
-                        onChange={(e) => updateRole(entry.id, e.target.value)}
-                        style={{ padding: 6 }}
-                      >
-                        <option value="">No role</option>
-                        {roles.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      entry.role?.name ?? '—'
-                    )}
-                  </td>
+          <div style={{
+            background: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.lg,
+            overflow: 'hidden',
+          }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: colors.card }}>
+                  <th style={headerCellStyle}>Person</th>
+                  <th style={headerCellStyle}>Default Role</th>
                   {canDelete && (
-                    <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0', textAlign: 'right' }}>
-                      <button onClick={() => removeFromRoster(entry.id)}>Remove</button>
-                    </td>
+                    <th style={{ ...headerCellStyle, width: 80 }} />
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {roster.map((entry) => (
+                  <tr key={entry.id}>
+                    <td style={cellStyle}>
+                      {entry.person?.display_name ?? '—'}
+                    </td>
+                    <td style={cellStyle}>
+                      {canEdit ? (
+                        <select
+                          value={entry.role_id ?? ''}
+                          onChange={(e) => updateRole(entry.id, e.target.value)}
+                          className="input-select"
+                          style={{ fontFamily: font.sans, fontSize: 13, padding: '4px 8px' }}
+                        >
+                          <option value="">No role</option>
+                          {roles.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span style={{ color: entry.role ? colors.textPrimary : colors.textMuted }}>
+                          {entry.role?.name ?? '—'}
+                        </span>
+                      )}
+                    </td>
+                    {canDelete && (
+                      <td style={{ ...cellStyle, textAlign: 'right' }}>
+                        <button
+                          onClick={() => removeFromRoster(entry.id)}
+                          className="btn-link-danger"
+                          style={{ fontSize: 13 }}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </section>

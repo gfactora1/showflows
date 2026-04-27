@@ -6,215 +6,213 @@ import { supabase } from '../../lib/supabaseClient'
 
 type Mode = 'signin' | 'signup' | 'magic' | 'forgot'
 
+// ── Design tokens (inline — this page has no AppNav wrapper) ─────────────────
+const t = {
+  base:        '#1C1D2E',
+  surface:     '#252638',
+  card:        '#31344D',
+  elevated:    '#3A3E5C',
+  border:      'rgba(255,255,255,0.09)',
+  borderStrong:'rgba(255,255,255,0.15)',
+  violet:      '#7C3AED',
+  violetHover: '#8B5CF6',
+  blue:        '#295FFF',
+  textPrimary: '#F0F2F8',
+  textSecondary:'#9CA3AF',
+  textMuted:   '#6B7280',
+  green:       '#22C55E',
+  red:         '#FC8181',
+}
+
+// ── Shared element styles ─────────────────────────────────────────────────────
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  background: t.elevated,
+  border: `1px solid ${t.borderStrong}`,
+  borderRadius: 8,
+  fontSize: 14,
+  color: t.textPrimary,
+  boxSizing: 'border-box',
+  marginBottom: 12,
+  outline: 'none',
+  fontFamily: 'inherit',
+}
+
+const primaryBtn = (loading: boolean): React.CSSProperties => ({
+  width: '100%',
+  padding: '11px 0',
+  background: loading ? t.elevated : t.violet,
+  color: loading ? t.textMuted : 'white',
+  border: 'none',
+  borderRadius: 8,
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: loading ? 'not-allowed' : 'pointer',
+  marginBottom: 12,
+  fontFamily: 'inherit',
+  transition: 'background 0.14s',
+})
+
+const ghostBtn: React.CSSProperties = {
+  width: '100%',
+  padding: '11px 0',
+  background: 'transparent',
+  color: t.textPrimary,
+  border: `1px solid ${t.borderStrong}`,
+  borderRadius: 8,
+  fontSize: 14,
+  fontWeight: 500,
+  cursor: 'pointer',
+  marginBottom: 20,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  fontFamily: 'inherit',
+}
+
+const tabStyle = (active: boolean): React.CSSProperties => ({
+  flex: 1,
+  padding: '8px 0',
+  background: active ? t.violet : 'transparent',
+  color: active ? 'white' : t.textMuted,
+  border: `1px solid ${active ? t.violet : t.borderStrong}`,
+  borderRadius: 6,
+  fontSize: 13,
+  fontWeight: active ? 600 : 400,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  transition: 'background 0.14s, color 0.14s',
+})
+
+const container: React.CSSProperties = {
+  minHeight: '100vh',
+  background: t.base,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '24px',
+  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+}
+
+const cardStyle: React.CSSProperties = {
+  background: t.surface,
+  border: `1px solid ${t.border}`,
+  borderRadius: 12,
+  padding: '32px',
+  width: '100%',
+  maxWidth: 420,
+}
+
+// ── Logo component — reused in both form states ───────────────────────────────
+function Logo() {
+  return (
+    <div style={{ textAlign: 'center', marginBottom: 28 }}>
+      <img
+        src="/logo.png"
+        alt="ShowFlows"
+        style={{ height: 30, width: 'auto', display: 'inline-block' }}
+      />
+    </div>
+  )
+}
+
+// ── Main form ─────────────────────────────────────────────────────────────────
+
 function LoginForm() {
   const searchParams = useSearchParams()
   const next = searchParams.get('next') ?? searchParams.get('redirect') ?? '/'
 
-  const [mode, setMode] = useState<Mode>('signin')
-  const [email, setEmail] = useState('')
+  const [mode, setMode]       = useState<Mode>('signin')
+  const [email, setEmail]     = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
+  const [name, setName]       = useState('')
   const [loading, setLoading] = useState(false)
-  const [msg, setMsg] = useState('')
+  const [msg, setMsg]         = useState('')
   const [isError, setIsError] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        window.location.href = next
-      }
+      if (data.session) window.location.href = next
     })
   }, [next])
 
-  const showMsg = (text: string, error = false) => {
-    setMsg(text)
-    setIsError(error)
-  }
+  const showMsg = (text: string, error = false) => { setMsg(text); setIsError(error) }
 
   const handleGoogle = async () => {
     setLoading(true)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
     })
-    if (error) {
-      showMsg(error.message, true)
-      setLoading(false)
-    }
+    if (error) { showMsg(error.message, true); setLoading(false) }
   }
 
   const handleEmailPassword = async () => {
-    if (!email.trim()) return showMsg('Email is required.', true)
+    if (!email.trim())    return showMsg('Email is required.', true)
     if (!password.trim()) return showMsg('Password is required.', true)
-
-    setLoading(true)
-    setMsg('')
+    setLoading(true); setMsg('')
 
     if (mode === 'signin') {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) {
-        showMsg(error.message, true)
-        setLoading(false)
-      } else {
-        window.location.href = next
-      }
+      if (error) { showMsg(error.message, true); setLoading(false) }
+      else window.location.href = next
     } else {
       const { error } = await supabase.auth.signUp({
-        email,
-        password,
+        email, password,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-          data: {
-            full_name: name.trim() || undefined,
-          },
+          data: { full_name: name.trim() || undefined },
         },
       })
-      if (error) {
-        showMsg(error.message, true)
-        setLoading(false)
-      } else {
-        showMsg('Check your email to confirm your account before signing in.')
-        setLoading(false)
-      }
+      if (error) { showMsg(error.message, true) }
+      else showMsg('Check your email to confirm your account before signing in.')
+      setLoading(false)
     }
   }
 
   const handleMagicLink = async () => {
     if (!email.trim()) return showMsg('Email is required.', true)
-
-    setLoading(true)
-    setMsg('')
-
+    setLoading(true); setMsg('')
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
     })
-
-    if (error) {
-      showMsg(error.message, true)
-    } else {
-      showMsg('Magic link sent — check your email to sign in.')
-    }
+    if (error) showMsg(error.message, true)
+    else showMsg('Magic link sent — check your email to sign in.')
     setLoading(false)
   }
 
   const handleForgotPassword = async () => {
     if (!email.trim()) return showMsg('Enter your email address above.', true)
-
-    setLoading(true)
-    setMsg('')
-
+    setLoading(true); setMsg('')
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     })
-
-    if (error) {
-      showMsg(error.message, true)
-    } else {
-      showMsg('Password reset email sent — check your inbox.')
-    }
+    if (error) showMsg(error.message, true)
+    else showMsg('Password reset email sent — check your inbox.')
     setLoading(false)
   }
 
-  const container: React.CSSProperties = {
-    maxWidth: 420,
-    margin: '80px auto',
-    padding: '0 24px',
-    fontFamily: 'sans-serif',
-  }
-  const logo: React.CSSProperties = {
-    fontSize: 22,
-    fontWeight: 700,
-    letterSpacing: -0.5,
-    marginBottom: 32,
-    display: 'block',
-    textAlign: 'center',
-  }
-  const card: React.CSSProperties = {
-    border: '1px solid #e5e5e5',
-    borderRadius: 12,
-    padding: 32,
-    background: 'white',
-  }
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '10px 12px',
-    border: '1px solid #ddd',
-    borderRadius: 8,
-    fontSize: 14,
-    boxSizing: 'border-box',
-    marginBottom: 12,
-  }
-  const primaryBtn: React.CSSProperties = {
-    width: '100%',
-    padding: '11px 0',
-    background: loading ? '#999' : '#111',
-    color: 'white',
-    border: 'none',
-    borderRadius: 8,
-    fontSize: 15,
-    fontWeight: 600,
-    cursor: loading ? 'not-allowed' : 'pointer',
-    marginBottom: 12,
-  }
-  const googleBtn: React.CSSProperties = {
-    width: '100%',
-    padding: '11px 0',
-    background: 'white',
-    color: '#333',
-    border: '1px solid #ddd',
-    borderRadius: 8,
-    fontSize: 15,
-    fontWeight: 500,
-    cursor: loading ? 'not-allowed' : 'pointer',
-    marginBottom: 20,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  }
-  const divider: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 20,
-    color: '#aaa',
-    fontSize: 13,
-  }
-  const dividerLine: React.CSSProperties = {
-    flex: 1, height: 1, background: '#eee',
-  }
-  const tabStyle = (active: boolean): React.CSSProperties => ({
-    flex: 1,
-    padding: '8px 0',
-    background: active ? '#111' : 'none',
-    color: active ? 'white' : '#666',
-    border: '1px solid #ddd',
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: active ? 600 : 400,
-    cursor: 'pointer',
-  })
-
-  const title = mode === 'signin' ? 'Sign in to ShowFlows' :
+  const titleText =
+    mode === 'signin' ? 'Welcome back' :
     mode === 'signup' ? 'Create your account' :
-    mode === 'magic' ? 'Sign in with magic link' :
+    mode === 'magic'  ? 'Sign in with magic link' :
     'Reset your password'
 
-  // Forgot password mode
+  // ── Forgot password state ─────────────────────────────────────────────────
   if (mode === 'forgot') {
     return (
       <div style={container}>
-        <span style={logo}>ShowFlows</span>
-        <div style={card}>
-          <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 8px', textAlign: 'center' }}>
+        <div style={cardStyle}>
+          <Logo />
+          <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 6px', textAlign: 'center', color: t.textPrimary }}>
             Reset your password
           </h2>
-          <p style={{ color: '#888', fontSize: 13, textAlign: 'center', marginBottom: 24 }}>
+          <p style={{ color: t.textMuted, fontSize: 13, textAlign: 'center', marginBottom: 24 }}>
             Enter your email and we'll send you a reset link.
           </p>
           <input
@@ -226,34 +224,36 @@ function LoginForm() {
             onKeyDown={(e) => { if (e.key === 'Enter') handleForgotPassword() }}
           />
           {msg && (
-            <p style={{ fontSize: 13, color: isError ? '#c00' : '#1a7a3a', marginBottom: 12, textAlign: 'center' }}>
+            <p style={{ fontSize: 13, color: isError ? t.red : t.green, marginBottom: 12, textAlign: 'center' }}>
               {msg}
             </p>
           )}
-          <button onClick={handleForgotPassword} disabled={loading} style={primaryBtn}>
+          <button onClick={handleForgotPassword} disabled={loading} style={primaryBtn(loading)}>
             {loading ? 'Sending…' : 'Send reset link'}
           </button>
           <button
             onClick={() => { setMode('signin'); setMsg('') }}
-            style={{ background: 'none', border: 'none', width: '100%', textAlign: 'center', fontSize: 13, color: '#888', cursor: 'pointer' }}
+            style={{ background: 'none', border: 'none', width: '100%', textAlign: 'center', fontSize: 13, color: t.blue, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
           >
-            Back to sign in
+            ← Back to sign in
           </button>
         </div>
       </div>
     )
   }
 
+  // ── Main sign in / sign up / magic link ───────────────────────────────────
   return (
     <div style={container}>
-      <span style={logo}>ShowFlows</span>
-      <div style={card}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 24px', textAlign: 'center' }}>
-          {title}
+      <div style={cardStyle}>
+        <Logo />
+
+        <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 24px', textAlign: 'center', color: t.textPrimary }}>
+          {titleText}
         </h2>
 
         {/* Google OAuth */}
-        <button onClick={handleGoogle} disabled={loading} style={googleBtn}>
+        <button onClick={handleGoogle} disabled={loading} style={ghostBtn}>
           <svg width="18" height="18" viewBox="0 0 48 48">
             <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
             <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
@@ -264,26 +264,20 @@ function LoginForm() {
           Continue with Google
         </button>
 
-        <div style={divider}>
-          <div style={dividerLine} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, color: t.textMuted, fontSize: 13 }}>
+          <div style={{ flex: 1, height: 1, background: t.border }} />
           <span>or</span>
-          <div style={dividerLine} />
+          <div style={{ flex: 1, height: 1, background: t.border }} />
         </div>
 
         {/* Mode tabs */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
-          <button style={tabStyle(mode === 'signin')} onClick={() => { setMode('signin'); setMsg('') }}>
-            Sign in
-          </button>
-          <button style={tabStyle(mode === 'signup')} onClick={() => { setMode('signup'); setMsg('') }}>
-            Sign up
-          </button>
-          <button style={tabStyle(mode === 'magic')} onClick={() => { setMode('magic'); setMsg('') }}>
-            Magic link
-          </button>
+          <button style={tabStyle(mode === 'signin')} onClick={() => { setMode('signin'); setMsg('') }}>Sign in</button>
+          <button style={tabStyle(mode === 'signup')} onClick={() => { setMode('signup'); setMsg('') }}>Sign up</button>
+          <button style={tabStyle(mode === 'magic')}  onClick={() => { setMode('magic');  setMsg('') }}>Magic link</button>
         </div>
 
-        {/* Name field — signup only */}
+        {/* Name — signup only */}
         {mode === 'signup' && (
           <input
             type="text"
@@ -294,7 +288,7 @@ function LoginForm() {
           />
         )}
 
-        {/* Email field */}
+        {/* Email */}
         <input
           type="email"
           placeholder="you@example.com"
@@ -306,7 +300,7 @@ function LoginForm() {
           }}
         />
 
-        {/* Password field — not shown for magic link */}
+        {/* Password — not shown for magic link */}
         {mode !== 'magic' && (
           <input
             type="password"
@@ -318,19 +312,18 @@ function LoginForm() {
           />
         )}
 
-        {/* Password hint for signup */}
         {mode === 'signup' && (
-          <p style={{ fontSize: 12, color: '#aaa', marginTop: -8, marginBottom: 12 }}>
+          <p style={{ fontSize: 12, color: t.textMuted, marginTop: -8, marginBottom: 12 }}>
             At least 6 characters
           </p>
         )}
 
-        {/* Forgot password link — sign in mode only */}
+        {/* Forgot password link */}
         {mode === 'signin' && (
           <div style={{ textAlign: 'right', marginBottom: 12, marginTop: -4 }}>
             <button
               onClick={() => { setMode('forgot'); setMsg('') }}
-              style={{ background: 'none', border: 'none', fontSize: 12, color: '#888', cursor: 'pointer', padding: 0 }}
+              style={{ background: 'none', border: 'none', fontSize: 12, color: t.blue, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
             >
               Forgot password?
             </button>
@@ -338,7 +331,7 @@ function LoginForm() {
         )}
 
         {msg && (
-          <p style={{ fontSize: 13, color: isError ? '#c00' : '#1a7a3a', marginBottom: 12, textAlign: 'center' }}>
+          <p style={{ fontSize: 13, color: isError ? t.red : t.green, marginBottom: 12, textAlign: 'center' }}>
             {msg}
           </p>
         )}
@@ -346,7 +339,7 @@ function LoginForm() {
         <button
           onClick={mode === 'magic' ? handleMagicLink : handleEmailPassword}
           disabled={loading}
-          style={primaryBtn}
+          style={primaryBtn(loading)}
         >
           {loading ? 'Please wait…' :
             mode === 'signin' ? 'Sign in' :
@@ -354,11 +347,11 @@ function LoginForm() {
             'Send magic link'}
         </button>
 
-        <p style={{ fontSize: 12, color: '#aaa', textAlign: 'center', margin: 0 }}>
+        <p style={{ fontSize: 12, color: t.textMuted, textAlign: 'center', margin: 0, lineHeight: 1.6 }}>
           By continuing you agree to ShowFlows'{' '}
-          <a href="/terms" style={{ color: '#aaa' }}>Terms of Service</a>
+          <a href="/terms" style={{ color: t.textMuted, textDecoration: 'underline' }}>Terms of Service</a>
           {' '}and{' '}
-          <a href="/privacy" style={{ color: '#aaa' }}>Privacy Policy</a>.
+          <a href="/privacy" style={{ color: t.textMuted, textDecoration: 'underline' }}>Privacy Policy</a>.
         </p>
       </div>
     </div>
@@ -368,7 +361,13 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div style={{ padding: 40, textAlign: 'center', fontFamily: 'sans-serif' }}>Loading…</div>
+      <div style={{
+        minHeight: '100vh', background: '#1C1D2E',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'sans-serif', color: '#6B7280', fontSize: 14,
+      }}>
+        Loading…
+      </div>
     }>
       <LoginForm />
     </Suspense>

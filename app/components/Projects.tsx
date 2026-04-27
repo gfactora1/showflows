@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import ProjectDetail from './ProjectDetail'
+import MemberShowsView from './MemberShowsView'
+import { colors, radius, font } from './tokens'
 
 type Project = {
   id: string
@@ -13,13 +15,51 @@ type Project = {
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
-export default function Projects() {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
-  const [myRole, setMyRole] = useState<Role | null>(null)
-  const [name, setName] = useState('')
-  const [loading, setLoading] = useState(false)
+type Props = {
+  projects: Project[]
+  setProjects: (projects: Project[]) => void
+  selectedProject: Project | null
+  onSelectProject: (project: Project | null) => void
+  myRole: Role | null
+  setMyRole: (role: Role | null) => void
+  viewMode: 'admin' | 'member'
+  activeSection: string
+  onNavigate: (section: string) => void
+}
+
+export interface ProjectsHandle {
+  openCreateModal: () => void
+}
+
+function ProjectsInner(
+  {
+    projects,
+    setProjects,
+    selectedProject,
+    onSelectProject,
+    myRole,
+    setMyRole,
+    viewMode,
+    activeSection,
+    onNavigate,
+  }: Props,
+  ref: React.Ref<ProjectsHandle>
+) {
   const [msg, setMsg] = useState('')
+
+  // Create modal state
+  const [modalOpen, setModalOpen] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [createMsg, setCreateMsg] = useState('')
+
+  useImperativeHandle(ref, () => ({
+    openCreateModal: () => {
+      setNewName('')
+      setCreateMsg('')
+      setModalOpen(true)
+    },
+  }))
 
   const loadProjects = async () => {
     setMsg('')
@@ -38,14 +78,12 @@ export default function Projects() {
 
     if (selectedProject) {
       const stillThere = rows.find((p) => p.id === selectedProject.id)
-      setSelectedProject(stillThere ?? null)
+      if (!stillThere) onSelectProject(null)
     }
   }
 
   const loadMyRole = async (projectId: string) => {
-    // Reset immediately so ProjectDetail waits rather than flashing the wrong tabs
     setMyRole(null)
-
     const { data: userData } = await supabase.auth.getUser()
     const email = userData?.user?.email?.trim().toLowerCase() ?? ''
     if (!email) return
@@ -74,21 +112,28 @@ export default function Projects() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject?.id])
 
-  const createProject = async () => {
-    setMsg('')
-    const trimmed = name.trim()
-    if (!trimmed) return
+  // ESC closes modal
+  useEffect(() => {
+    if (!modalOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModalOpen(false)
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [modalOpen])
 
-    setLoading(true)
+  const createProject = async () => {
+    setCreateMsg('')
+    const trimmed = newName.trim()
+    if (!trimmed) return setCreateMsg('Project name is required.')
+
+    setCreating(true)
     try {
       const { data: sessionData, error: sessErr } = await supabase.auth.getSession()
       if (sessErr) throw sessErr
 
       const user = sessionData.session?.user
-      if (!user?.id) {
-        setMsg('Not logged in.')
-        return
-      }
+      if (!user?.id) { setCreateMsg('Not logged in.'); return }
 
       const { data: newProject, error: projErr } = await supabase
         .from('projects')
@@ -100,85 +145,212 @@ export default function Projects() {
         throw new Error(projErr?.message ?? 'Unknown error creating project')
       }
 
-      setName('')
-      setSelectedProject(newProject as Project)
+      setModalOpen(false)
+      setNewName('')
+      onSelectProject(newProject as Project)
       await loadProjects()
     } catch (e: any) {
-      setMsg(`Error creating project: ${e?.message ?? String(e)}`)
+      setCreateMsg(`Error: ${e?.message ?? String(e)}`)
     } finally {
-      setLoading(false)
+      setCreating(false)
     }
   }
 
-  return (
-    <section style={{ marginTop: 24 }}>
-      <h2>Projects</h2>
-
-      <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="New project name (e.g., Simply Phil)"
-          style={{ padding: 8, width: 320 }}
+  function CreateModal() {
+    return (
+      <>
+        {/* Backdrop */}
+        <div
+          onClick={() => setModalOpen(false)}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            zIndex: 900,
+          }}
         />
-        <button onClick={createProject} disabled={loading}>
-          {loading ? 'Creating...' : 'Create'}
-        </button>
-      </div>
+        {/* Dialog */}
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: colors.surface,
+            border: `1px solid ${colors.borderStrong}`,
+            borderRadius: radius.xl,
+            padding: '28px 28px 24px',
+            width: 'min(440px, calc(100vw - 32px))',
+            zIndex: 901,
+            boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+            fontFamily: font.sans,
+          }}
+        >
+          <h2 style={{ margin: '0 0 6px', fontSize: 17, fontWeight: 700, color: colors.textPrimary }}>
+            Create Project
+          </h2>
+          <p style={{ margin: '0 0 20px', fontSize: 13, color: colors.textSecondary, lineHeight: 1.5 }}>
+            Give your project a name — you can always rename it later.
+          </p>
 
-      {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
+          <input
+            autoFocus
+            placeholder="e.g. Simply Phil, The Groove Collective"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && createProject()}
+            className="input-field"
+            style={{ width: '100%', boxSizing: 'border-box', fontFamily: font.sans, marginBottom: 8 }}
+          />
 
-      <div style={{ display: 'flex', gap: 32, marginTop: 16 }}>
-        <div style={{ minWidth: 220 }}>
-          <ul style={{ paddingLeft: 0, listStyle: 'none', margin: 0 }}>
+          {createMsg && (
+            <p style={{ fontSize: 12, color: colors.red, margin: '0 0 12px' }}>
+              {createMsg}
+            </p>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button
+              onClick={() => setModalOpen(false)}
+              disabled={creating}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={createProject}
+              disabled={creating || !newName.trim()}
+              className="btn-primary"
+            >
+              {creating ? 'Creating…' : 'Create Project'}
+            </button>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // ── Member mode: full-width schedule ──
+  if (viewMode === 'member') {
+    return (
+      <>
+        <MemberShowsView projects={projects} />
+        {modalOpen && <CreateModal />}
+      </>
+    )
+  }
+
+  // ── Admin mode: sidebar + content ──
+  return (
+    <div style={{ display: 'flex', gap: 0, minHeight: 0, fontFamily: font.sans }}>
+
+      {/* Sidebar */}
+      <div style={{
+        width: 220,
+        flexShrink: 0,
+        borderRight: `1px solid ${colors.border}`,
+        padding: '20px 12px',
+        overflowY: 'auto',
+      }}>
+        <div style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: colors.textMuted,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          marginBottom: 10,
+          paddingLeft: 4,
+        }}>
+          Projects
+        </div>
+
+        {projects.length === 0 ? (
+          <p style={{ fontSize: 13, color: colors.textMuted, paddingLeft: 4 }}>
+            No projects yet.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {projects.map((p) => {
               const isSelected = selectedProject?.id === p.id
               return (
-                <li key={p.id} style={{ marginBottom: 8 }}>
-                  <button
-                    onClick={() => setSelectedProject(p)}
-                    style={{
-                      cursor: 'pointer',
-                      border: isSelected ? '1px solid #333' : '1px solid #ccc',
-                      background: isSelected ? '#f3f3f3' : 'white',
-                      padding: '8px 10px',
-                      borderRadius: 8,
-                      width: '100%',
-                      textAlign: 'left',
-                    }}
-                  >
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        width: 10,
-                        height: 10,
-                        borderRadius: 999,
-                        background: p.color ?? '#ccc',
-                        marginRight: 8,
-                      }}
-                    />
+                <button
+                  key={p.id}
+                  onClick={() => onSelectProject(p)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '7px 10px',
+                    borderRadius: radius.md,
+                    border: 'none',
+                    width: '100%',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontFamily: font.sans,
+                    fontSize: 13,
+                    fontWeight: isSelected ? 600 : 400,
+                    color: isSelected ? colors.textPrimary : colors.textSecondary,
+                    background: isSelected ? colors.violetSoft2 : 'transparent',
+                    transition: 'background 0.12s ease, color 0.12s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = colors.violetSoft
+                      e.currentTarget.style.color = colors.textPrimary
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'transparent'
+                      e.currentTarget.style.color = colors.textSecondary
+                    }
+                  }}
+                >
+                  <div style={{
+                    width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                    background: p.color ?? colors.violet,
+                  }} />
+                  <span style={{
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
                     {p.name}
-                  </button>
-                </li>
+                  </span>
+                </button>
               )
             })}
-          </ul>
+          </div>
+        )}
 
-          {projects.length === 0 && (
-            <p style={{ marginTop: 12, opacity: 0.8 }}>
-              No projects yet — create your first one above.
-            </p>
-          )}
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {selectedProject ? (
-            <ProjectDetail project={selectedProject} myRole={myRole} />
-          ) : (
-            <p style={{ opacity: 0.8 }}>Select a project to get started.</p>
-          )}
-        </div>
+        {msg && (
+          <p style={{ fontSize: 12, color: colors.red, marginTop: 12, paddingLeft: 4 }}>
+            {msg}
+          </p>
+        )}
       </div>
-    </section>
+
+      {/* Main content */}
+      <div style={{ flex: 1, minWidth: 0, padding: '24px 28px', overflowY: 'auto' }}>
+        {selectedProject ? (
+          <ProjectDetail
+            project={selectedProject}
+            myRole={myRole}
+            viewMode={viewMode}
+            activeSection={activeSection as any}
+            onNavigate={onNavigate as any}
+          />
+        ) : (
+          <div style={{ paddingTop: 48, textAlign: 'center' }}>
+            <p style={{ fontSize: 15, color: colors.textMuted }}>
+              Select a project to get started.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {modalOpen && <CreateModal />}
+    </div>
   )
 }
+
+const Projects = forwardRef<ProjectsHandle, Props>(ProjectsInner)
+Projects.displayName = 'Projects'
+
+export default Projects

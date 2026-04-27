@@ -1,26 +1,473 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* =============================================================================
+   ShowFlows Design System
+   Tailwind v4 — all configuration lives here, no tailwind.config.js needed
+   ============================================================================= */
+
+@theme {
+
+  /* ── Surfaces ──────────────────────────────────────────────────────────────── */
+  --color-sf-base:     #1C1D2E;  /* page / app background                       */
+  --color-sf-deep:     #161722;  /* deeper than base — URL inputs                */
+  --color-sf-surface:  #252638;  /* nav bar, panels, secondary surfaces          */
+  --color-sf-card:     #31344D;  /* cards, list items, show cards                */
+  --color-sf-elevated: #3A3E5C;  /* hover states, dropdowns, raised elements     */
+
+  /* ── Borders ───────────────────────────────────────────────────────────────── */
+  --color-sf-border:        rgba(255,255,255,0.09);  /* card/section separators  */
+  --color-sf-border-strong: rgba(255,255,255,0.15);  /* input borders, active    */
+
+  /* ── Text — five tiers, strictly enforced ──────────────────────────────────── */
+  /*                                                                              */
+  /*  sf-text-primary   → titles, card names, nav items, button labels           */
+  /*  sf-text-secondary → descriptions, form labels, supporting content          */
+  /*  sf-text-muted     → helper text, timestamps, low-priority labels           */
+  /*  sf-text-dim       → decorative chrome only — NEVER for readable content    */
+  /*  sf-text-url       → URL/code inputs — near-white "copy me" signal          */
+  /*                                                                              */
+  --color-sf-text-primary:   #F0F2F8;
+  --color-sf-text-secondary: #9CA3AF;
+  --color-sf-text-muted:     #6B7280;
+  --color-sf-text-dim:       #4B5563;
+  --color-sf-text-url:       #F3F4F6;
+
+  /* ── Primary accent — violet ───────────────────────────────────────────────── */
+  --color-sf-accent:       #7C3AED;
+  --color-sf-accent-hover: #8B5CF6;
+  --color-sf-accent-light: #A78BFA;
+  --color-sf-accent-soft:  rgba(124,58,237,0.12);
+  --color-sf-accent-soft2: rgba(124,58,237,0.18);
+
+  /* ── Secondary accent — blue (links, secondary actions) ────────────────────── */
+  --color-sf-blue:       #295FFF;
+  --color-sf-blue-hover: #3B74FF;
+  --color-sf-blue-soft:  rgba(41,95,255,0.12);
+
+  /* ── Semantic — never use decoratively ─────────────────────────────────────── */
+  --color-sf-success:      #22C55E;
+  --color-sf-success-soft: rgba(34,197,94,0.12);
+  --color-sf-warning:      #F59E0B;
+  --color-sf-warning-soft: rgba(245,158,11,0.12);
+  --color-sf-danger:       #FC8181;  /* red-400, readable on all dark surfaces   */
+  --color-sf-danger-soft:  rgba(252,129,129,0.12);
+
+  /* ── Border radius ─────────────────────────────────────────────────────────── */
+  --radius-sf-sm: 6px;
+  --radius-sf-md: 8px;
+  --radius-sf-lg: 10px;
+  --radius-sf-xl: 12px;
+
+  /* ── Transitions ────────────────────────────────────────────────────────────── */
+  --transition-sf-fast:   90ms ease;
+  --transition-sf-normal: 140ms ease;
+
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* =============================================================================
+   Base styles
+   ============================================================================= */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-sf-base);
+  color: var(--color-sf-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Remove default browser input/select/button chrome in dark context */
+input, select, textarea, button {
+  font-family: inherit;
+}
+
+/* =============================================================================
+   BUTTONS
+   @layer components — compose with utility classes as needed
+   ============================================================================= */
+
+@layer components {
+
+  /* ── Primary CTA — violet fill ─────────────────────────────────────────────── */
+  /* Use for: Create Show, Save, Generate link, primary actions                   */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 16px;
+    background-color: var(--color-sf-accent);
+    color: #ffffff;
+    border: none;
+    border-radius: var(--radius-sf-md);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color var(--transition-sf-normal);
+  }
+  .btn-primary:hover {
+    background-color: var(--color-sf-accent-hover);
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* ── Secondary / ghost — bordered, neutral ────────────────────────────────── */
+  /* Use for: Edit, View/Assign, Cancel, Preview, secondary actions               */
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 12px;
+    background-color: transparent;
+    color: var(--color-sf-text-primary);
+    border: 1px solid var(--color-sf-border-strong);
+    border-radius: var(--radius-sf-sm);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color var(--transition-sf-normal);
+  }
+  .btn-secondary:hover {
+    background-color: var(--color-sf-elevated);
+  }
+  .btn-secondary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ── Danger / destructive — red border ────────────────────────────────────── */
+  /* Use for: Delete buttons inside cards                                          */
+  .btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 12px;
+    background-color: transparent;
+    color: var(--color-sf-danger);
+    border: 1px solid rgba(252,129,129,0.35);
+    border-radius: var(--radius-sf-sm);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color var(--transition-sf-normal);
+  }
+  .btn-danger:hover {
+    background-color: var(--color-sf-danger-soft);
+  }
+  .btn-danger:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ── Link-style danger — text only, underline on hover ───────────────────── */
+  /* Use for: "Revoke link & generate new one"                                    */
+  .btn-link-danger {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--color-sf-danger);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: text-decoration var(--transition-sf-normal);
+  }
+  .btn-link-danger:hover {
+    text-decoration: underline;
+  }
+  .btn-link-danger:disabled {
+    color: var(--color-sf-text-muted);
+    cursor: not-allowed;
+    text-decoration: none;
+  }
+
+}
+
+/* =============================================================================
+   INPUTS & FORM FIELDS
+   ============================================================================= */
+
+@layer components {
+
+  /* ── Standard text input ───────────────────────────────────────────────────── */
+  /* Use for: title, name, email, phone, project name                             */
+  .input-field {
+    width: 100%;
+    padding: 8px 11px;
+    background-color: var(--color-sf-elevated);
+    color: var(--color-sf-text-primary);
+    border: 1px solid var(--color-sf-border-strong);
+    border-radius: var(--radius-sf-md);
+    font-size: 13px;
+    outline: none;
+    transition: border-color var(--transition-sf-normal);
+  }
+  .input-field::placeholder {
+    color: var(--color-sf-text-muted);
+  }
+  .input-field:focus {
+    border-color: rgba(124,58,237,0.6);
+    box-shadow: 0 0 0 2px rgba(124,58,237,0.15);
+  }
+
+  /* ── Select / dropdown ─────────────────────────────────────────────────────── */
+  /* Use for: venue picker, role picker, person selector                           */
+  .input-select {
+    width: 100%;
+    padding: 8px 11px;
+    background-color: var(--color-sf-elevated);
+    color: var(--color-sf-text-primary);
+    border: 1px solid var(--color-sf-border-strong);
+    border-radius: var(--radius-sf-md);
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color var(--transition-sf-normal);
+  }
+  .input-select:focus {
+    border-color: rgba(124,58,237,0.6);
+  }
+
+  /* ── URL / code input ──────────────────────────────────────────────────────── */
+  /* Use for: shareable calendar URL fields                                        */
+  /* Near-white text + deeper bg + violet border = "this is the thing to copy"   */
+  .input-url {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 11px;
+    background-color: var(--color-sf-deep);
+    color: var(--color-sf-text-url);
+    border: 1px solid rgba(124,58,237,0.35);
+    border-radius: var(--radius-sf-md);
+    font-size: 12px;
+    font-family: monospace;
+    letter-spacing: 0.01em;
+    outline: none;
+  }
+
+}
+
+/* =============================================================================
+   CARDS & PANELS
+   ============================================================================= */
+
+@layer components {
+
+  /* ── Standard card ─────────────────────────────────────────────────────────── */
+  /* Use for: show cards, person cards, list items                                 */
+  .card {
+    background-color: var(--color-sf-card);
+    border: 1px solid var(--color-sf-border);
+    border-radius: var(--radius-sf-lg);
+    padding: 14px 16px;
+  }
+
+  /* ── Interactive card — adds hover lift ────────────────────────────────────── */
+  /* Use for: clickable show cards, any card that opens a detail view             */
+  .card-interactive {
+    background-color: var(--color-sf-card);
+    border: 1px solid var(--color-sf-border);
+    border-radius: var(--radius-sf-lg);
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: background-color var(--transition-sf-normal),
+                transform var(--transition-sf-normal),
+                box-shadow var(--transition-sf-normal);
+  }
+  .card-interactive:hover {
+    background-color: var(--color-sf-elevated);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  }
+  .card-interactive:active {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+
+  /* ── Surface panel ─────────────────────────────────────────────────────────── */
+  /* Use for: "Add a Show" / "Add a Person" form containers                       */
+  .panel {
+    background-color: var(--color-sf-surface);
+    border: 1px solid var(--color-sf-border);
+    border-radius: var(--radius-sf-lg);
+    padding: 16px;
+  }
+
+  /* ── Section label inside card/panel ──────────────────────────────────────── */
+  /* Use for: "WEB CALENDAR", "ICAL FEED", "ADD A SHOW", "ACTIVE — 3"           */
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-sf-text-secondary);
+    margin-bottom: 6px;
+  }
+
+}
+
+/* =============================================================================
+   SIDEBAR
+   ============================================================================= */
+
+@layer components {
+
+  /* ── Sidebar item — unselected ─────────────────────────────────────────────── */
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    background-color: transparent;
+    color: var(--color-sf-text-primary);
+    border: 1px solid var(--color-sf-border);
+    border-radius: var(--radius-sf-md);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    opacity: 0.82;
+    transition: background-color var(--transition-sf-normal),
+                opacity var(--transition-sf-normal);
+  }
+  .sidebar-item:hover {
+    background-color: var(--color-sf-surface);
+    opacity: 1;
+  }
+
+  /* ── Sidebar item — selected/active ───────────────────────────────────────── */
+  .sidebar-item-active {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    background-color: var(--color-sf-card);
+    color: var(--color-sf-text-primary);
+    border: 1px solid var(--color-sf-border-strong);
+    border-radius: var(--radius-sf-md);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    opacity: 1;
+  }
+
+}
+
+/* =============================================================================
+   STATUS PILLS
+   ============================================================================= */
+
+@layer components {
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .pill-success {
+    background-color: var(--color-sf-success-soft);
+    color: var(--color-sf-success);
+  }
+
+  .pill-warning {
+    background-color: var(--color-sf-warning-soft);
+    color: var(--color-sf-warning);
+  }
+
+  .pill-danger {
+    background-color: var(--color-sf-danger-soft);
+    color: var(--color-sf-danger);
+  }
+
+  .pill-accent {
+    background-color: var(--color-sf-accent-soft);
+    color: var(--color-sf-accent-light);
+  }
+
+}
+
+/* =============================================================================
+   TEXT HELPERS
+   ============================================================================= */
+
+@layer components {
+
+  /* Titles, card names, primary content */
+  .text-primary   { color: var(--color-sf-text-primary); }
+
+  /* Descriptions, form labels, supporting content */
+  .text-secondary { color: var(--color-sf-text-secondary); }
+
+  /* Helper text, timestamps — use sparingly */
+  .text-muted     { color: var(--color-sf-text-muted); }
+
+  /* Danger / destructive actions */
+  .text-danger    { color: var(--color-sf-danger); }
+
+  /* Links / blue actions */
+  .text-link      { color: var(--color-sf-blue); cursor: pointer; }
+  .text-link:hover { text-decoration: underline; }
+
+}
+
+/* =============================================================================
+   MEMBER INDICATOR BAR (below nav when in Member mode)
+   ============================================================================= */
+
+@layer components {
+
+  .member-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background-color: var(--color-sf-accent-soft);
+    border-bottom: 1px solid rgba(124,58,237,0.2);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-sf-text-secondary);
+  }
+
+}
+
+/* =============================================================================
+   TABLE (lineup table in ShowDetail)
+   ============================================================================= */
+
+@layer components {
+
+  .table-header-cell {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-sf-text-muted);
+    background-color: var(--color-sf-card);
+    border-bottom: 1px solid var(--color-sf-border);
+  }
+
+  .table-cell {
+    padding: 11px 14px;
+    color: var(--color-sf-text-primary);
+    font-size: 13px;
+    border-bottom: 1px solid var(--color-sf-border);
+  }
+
+  .table-cell-secondary {
+    padding: 11px 14px;
+    color: var(--color-sf-text-secondary);
+    font-size: 13px;
+    border-bottom: 1px solid var(--color-sf-border);
+  }
+
 }

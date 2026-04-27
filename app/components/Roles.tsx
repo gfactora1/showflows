@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { colors, radius, font } from './tokens'
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
@@ -148,45 +149,72 @@ export default function Roles({ projectId, myRole }: Props) {
       <div
         key={role.id}
         style={{
-          border: '1px solid #ddd',
-          borderRadius: 8,
-          padding: 12,
-          marginBottom: 10,
-          opacity: role.is_active ? 1 : 0.6,
-          background: role.is_active ? 'white' : '#fafafa',
+          background: colors.card,
+          border: `1px solid ${colors.border}`,
+          borderRadius: radius.md,
+          padding: '12px 14px',
+          marginBottom: 8,
+          opacity: role.is_active ? 1 : 0.55,
+          fontFamily: font.sans,
         }}
       >
         {isEditing ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 400 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 380 }}>
             <input
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
-              style={{ padding: 8 }}
               placeholder="Role name"
+              className="input-field"
+              style={{ fontFamily: font.sans }}
             />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => saveEdit(role.id)} disabled={loading}>
+              <button
+                onClick={() => saveEdit(role.id)}
+                disabled={loading}
+                className="btn-primary"
+              >
                 {loading ? 'Saving…' : 'Save'}
               </button>
-              <button onClick={cancelEdit} disabled={loading}>
+              <button
+                onClick={cancelEdit}
+                disabled={loading}
+                className="btn-secondary"
+              >
                 Cancel
               </button>
             </div>
           </div>
         ) : (
           <>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>{role.name}</div>
-            {!role.is_active && (
-              <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>Inactive</div>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontWeight: 600, fontSize: 14, color: colors.textPrimary }}>
+                {role.name}
+              </span>
+              {!role.is_active && (
+                <span style={{
+                  fontSize: 11,
+                  color: colors.textMuted,
+                  background: colors.elevated,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.full,
+                  padding: '1px 8px',
+                }}>
+                  Inactive
+                </span>
+              )}
+            </div>
             {canEdit && (
               <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-                <button onClick={() => startEdit(role)}>Edit</button>
-                <button onClick={() => toggleActive(role)}>
+                <button onClick={() => startEdit(role)} className="btn-secondary" style={{ fontSize: 13, padding: '4px 12px' }}>
+                  Edit
+                </button>
+                <button onClick={() => toggleActive(role)} className="btn-secondary" style={{ fontSize: 13, padding: '4px 12px' }}>
                   {role.is_active ? 'Mark inactive' : 'Mark active'}
                 </button>
                 {canDelete && (
-                  <button onClick={() => deleteRole(role.id)}>Delete</button>
+                  <button onClick={() => deleteRole(role.id)} className="btn-link-danger" style={{ fontSize: 13 }}>
+                    Delete
+                  </button>
                 )}
               </div>
             )}
@@ -197,43 +225,65 @@ export default function Roles({ projectId, myRole }: Props) {
   }
 
   return (
-    <section>
-      <h3 style={{ marginTop: 0 }}>Roles</h3>
+    <section style={{ fontFamily: font.sans }}>
+      <h3 style={{ marginTop: 0, marginBottom: 20, fontSize: 16, fontWeight: 600, color: colors.textPrimary }}>
+        Roles
+      </h3>
 
       {canEdit && (
-        <>
-          <h4 style={{ marginBottom: 8 }}>Add a Role</h4>
+        <div style={{
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: radius.lg,
+          padding: '16px',
+          marginBottom: 24,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: colors.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Add a Role
+          </div>
           <div style={{ display: 'flex', gap: 8, maxWidth: 400 }}>
             <input
               placeholder="Role name (e.g. Guitarist, FOH Engineer)"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              style={{ padding: 8, flex: 1 }}
+              onKeyDown={(e) => e.key === 'Enter' && createRole()}
+              className="input-field"
+              style={{ flex: 1, fontFamily: font.sans }}
             />
-            <button onClick={createRole} disabled={loading}>
+            <button onClick={createRole} disabled={loading} className="btn-primary">
               {loading ? 'Adding…' : 'Add'}
             </button>
           </div>
-        </>
+        </div>
       )}
 
-      {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
+      {msg && (
+        <p style={{ marginBottom: 16, fontSize: 13, color: colors.red }}>
+          {msg}
+        </p>
+      )}
 
-      <div style={{ marginTop: 24 }}>
+      <div>
         {active.length === 0 && inactive.length === 0 && (
-          <p style={{ opacity: 0.8 }}>No roles yet — add your first one above.</p>
+          <p style={{ color: colors.textMuted, fontSize: 14 }}>
+            No roles yet — add your first one above.
+          </p>
         )}
 
         {active.length > 0 && (
           <>
-            <h4 style={{ marginBottom: 8 }}>Active</h4>
+            <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+              Active
+            </div>
             {active.map((r) => renderRole(r))}
           </>
         )}
 
         {inactive.length > 0 && (
           <>
-            <h4 style={{ marginBottom: 8, marginTop: 20 }}>Inactive</h4>
+            <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, marginTop: 20 }}>
+              Inactive
+            </div>
             {inactive.map((r) => renderRole(r))}
           </>
         )}

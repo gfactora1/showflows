@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { colors, radius, font } from './tokens'
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
@@ -151,11 +152,10 @@ export default function Providers({ projectId, myRole }: Props) {
   const active = providers.filter((p) => p.is_active)
   const inactive = providers.filter((p) => !p.is_active)
 
-  const renderTypeLabel = (type: string) => {
-    return type.charAt(0).toUpperCase() + type.slice(1)
-  }
+  const renderTypeLabel = (type: string) =>
+    type.charAt(0).toUpperCase() + type.slice(1)
 
-  const renderForm = (
+  const renderFormFields = (
     values: typeof blank,
     set: (v: typeof blank) => void,
     onSubmit: () => void,
@@ -167,12 +167,14 @@ export default function Providers({ projectId, myRole }: Props) {
         placeholder="Provider name (e.g. Acme Sound Co.)"
         value={values.name}
         onChange={(e) => set({ ...values, name: e.target.value })}
-        style={{ padding: 8 }}
+        className="input-field"
+        style={{ fontFamily: font.sans }}
       />
       <select
         value={values.provider_type}
         onChange={(e) => set({ ...values, provider_type: e.target.value })}
-        style={{ padding: 8 }}
+        className="input-select"
+        style={{ fontFamily: font.sans }}
       >
         {PROVIDER_TYPES.map((t) => (
           <option key={t} value={t}>
@@ -181,11 +183,11 @@ export default function Providers({ projectId, myRole }: Props) {
         ))}
       </select>
       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-        <button onClick={onSubmit} disabled={loading}>
+        <button onClick={onSubmit} disabled={loading} className="btn-primary">
           {loading ? 'Saving…' : submitLabel}
         </button>
         {onCancel && (
-          <button onClick={onCancel} disabled={loading}>
+          <button onClick={onCancel} disabled={loading} className="btn-secondary">
             Cancel
           </button>
         )}
@@ -199,33 +201,58 @@ export default function Providers({ projectId, myRole }: Props) {
       <div
         key={provider.id}
         style={{
-          border: '1px solid #ddd',
-          borderRadius: 8,
-          padding: 12,
-          marginBottom: 10,
-          opacity: provider.is_active ? 1 : 0.6,
-          background: provider.is_active ? 'white' : '#fafafa',
+          background: colors.card,
+          border: `1px solid ${colors.border}`,
+          borderRadius: radius.md,
+          padding: '12px 14px',
+          marginBottom: 8,
+          opacity: provider.is_active ? 1 : 0.55,
+          fontFamily: font.sans,
         }}
       >
         {isEditing ? (
-          renderForm(editForm, setEditForm, () => saveEdit(provider.id), cancelEdit, 'Save')
+          renderFormFields(editForm, setEditForm, () => saveEdit(provider.id), cancelEdit, 'Save')
         ) : (
           <>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>{provider.name}</div>
-            <div style={{ marginTop: 3, fontSize: 13, opacity: 0.75 }}>
-              {renderTypeLabel(provider.provider_type)}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontWeight: 600, fontSize: 14, color: colors.textPrimary }}>
+                {provider.name}
+              </span>
+              <span style={{
+                fontSize: 11,
+                color: colors.textMuted,
+                background: colors.elevated,
+                border: `1px solid ${colors.border}`,
+                borderRadius: radius.full,
+                padding: '1px 8px',
+              }}>
+                {renderTypeLabel(provider.provider_type)}
+              </span>
+              {!provider.is_active && (
+                <span style={{
+                  fontSize: 11,
+                  color: colors.textMuted,
+                  background: colors.elevated,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.full,
+                  padding: '1px 8px',
+                }}>
+                  Inactive
+                </span>
+              )}
             </div>
-            {!provider.is_active && (
-              <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>Inactive</div>
-            )}
             {canEdit && (
               <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-                <button onClick={() => startEdit(provider)}>Edit</button>
-                <button onClick={() => toggleActive(provider)}>
+                <button onClick={() => startEdit(provider)} className="btn-secondary" style={{ fontSize: 13, padding: '4px 12px' }}>
+                  Edit
+                </button>
+                <button onClick={() => toggleActive(provider)} className="btn-secondary" style={{ fontSize: 13, padding: '4px 12px' }}>
                   {provider.is_active ? 'Mark inactive' : 'Mark active'}
                 </button>
                 {canDelete && (
-                  <button onClick={() => deleteProvider(provider.id)}>Delete</button>
+                  <button onClick={() => deleteProvider(provider.id)} className="btn-link-danger" style={{ fontSize: 13 }}>
+                    Delete
+                  </button>
                 )}
               </div>
             )}
@@ -236,33 +263,53 @@ export default function Providers({ projectId, myRole }: Props) {
   }
 
   return (
-    <section>
-      <h3 style={{ marginTop: 0 }}>Providers</h3>
+    <section style={{ fontFamily: font.sans }}>
+      <h3 style={{ marginTop: 0, marginBottom: 20, fontSize: 16, fontWeight: 600, color: colors.textPrimary }}>
+        Providers
+      </h3>
 
       {canEdit && (
-        <>
-          <h4 style={{ marginBottom: 8 }}>Add a Provider</h4>
-          {renderForm(form, setForm, createProvider)}
-        </>
+        <div style={{
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: radius.lg,
+          padding: '16px',
+          marginBottom: 24,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: colors.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Add a Provider
+          </div>
+          {renderFormFields(form, setForm, createProvider)}
+        </div>
       )}
 
-      {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
+      {msg && (
+        <p style={{ marginBottom: 16, fontSize: 13, color: colors.red }}>
+          {msg}
+        </p>
+      )}
 
-      <div style={{ marginTop: 24 }}>
+      <div>
         {active.length === 0 && inactive.length === 0 && (
-          <p style={{ opacity: 0.8 }}>No providers yet — add your first one above.</p>
+          <p style={{ color: colors.textMuted, fontSize: 14 }}>
+            No providers yet — add your first one above.
+          </p>
         )}
 
         {active.length > 0 && (
           <>
-            <h4 style={{ marginBottom: 8 }}>Active</h4>
+            <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+              Active
+            </div>
             {active.map((p) => renderProvider(p))}
           </>
         )}
 
         {inactive.length > 0 && (
           <>
-            <h4 style={{ marginBottom: 8, marginTop: 20 }}>Inactive</h4>
+            <div style={{ fontSize: 12, fontWeight: 600, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, marginTop: 20 }}>
+              Inactive
+            </div>
             {inactive.map((p) => renderProvider(p))}
           </>
         )}

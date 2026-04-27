@@ -126,41 +126,44 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   // Build show description
-  const venueName = (showData as any).venues?.name ? ` · ${(showData as any).venues.name}` : ''
+  const venueName = (showData as any).venues?.name ? ` \u00b7 ${(showData as any).venues.name}` : ''
   const showStr = `${showData.title}${venueName}`
-  const showTimeStr = `${formatShowTime(showData.starts_at)} → ${formatShowTime(showData.ends_at)}`
+  const showTimeStr = `${formatShowTime(showData.starts_at)} \u2192 ${formatShowTime(showData.ends_at)}`
 
   // Build conflict list
   const conflicts: ConflictItem[] = blockData.map((b: any) => ({
     blockDateStr: b.start_date === b.end_date
       ? formatDate(b.start_date)
-      : `${formatDate(b.start_date)} — ${formatDate(b.end_date)}`,
+      : `${formatDate(b.start_date)} \u2014 ${formatDate(b.end_date)}`,
     blockTimeStr: b.start_time && b.end_time
-      ? `${formatTime(b.start_time)} – ${formatTime(b.end_time)}`
+      ? `${formatTime(b.start_time)} \u2014 ${formatTime(b.end_time)}`
       : 'Full day',
     note: b.note,
   }))
 
   const blockListHtml = conflicts.map((c) => `
     <li style="margin-bottom:8px">
-      <strong>${c.blockDateStr}</strong> — ${c.blockTimeStr}
+      <strong>${c.blockDateStr}</strong> \u2014 ${c.blockTimeStr}
       ${c.note ? `<br><span style="color:#888;font-size:13px">${c.note}</span>` : ''}
     </li>
   `).join('')
 
   // 6. Send owner/editor email
-  const adminSubject = `⚠️ Scheduling conflict — ${projectData.name}`
+  const adminSubject = `Scheduling conflict \u2014 ${projectData.name}`
   const adminHtml = `
     <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-      <h2 style="font-size:20px;margin-bottom:4px">⚠️ Scheduling Conflict</h2>
+      <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #eee">
+        <img src="https://showflows.net/logo.png" alt="ShowFlows" width="120" style="height:auto;display:block" />
+      </div>
+      <h2 style="font-size:20px;margin-bottom:4px">&#9888; Scheduling Conflict</h2>
       <p style="color:#666;margin-top:0">${projectData.name}</p>
-      <p><strong>${personData.display_name}</strong> has been added to 
-        <strong>${showStr}</strong> 
+      <p><strong>${personData.display_name}</strong> has been added to
+        <strong>${showStr}</strong>
         (${showTimeStr}), but has unavailability blocks during this period:</p>
       <ul style="padding-left:20px">${blockListHtml}</ul>
       <p style="color:#888;font-size:13px">You may need to arrange a fill-in or confirm this assignment with the member.</p>
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-      <p style="color:#aaa;font-size:12px">ShowFlows — Conflict Notification</p>
+      <p style="color:#aaa;font-size:12px">ShowFlows &mdash; Conflict Notification</p>
     </div>
   `
 
@@ -188,18 +191,21 @@ export async function POST(request: Request) {
 
   // 7. Send member email if they have one
   if (personData.email && personData.email !== ownerMember?.member_email) {
-    const memberSubject = `⚠️ You have a scheduling conflict — ${projectData.name}`
+    const memberSubject = `Scheduling conflict \u2014 ${projectData.name}`
     const memberHtml = `
       <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-        <h2 style="font-size:20px;margin-bottom:4px">⚠️ Scheduling Conflict</h2>
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #eee">
+          <img src="https://showflows.net/logo.png" alt="ShowFlows" width="120" style="height:auto;display:block" />
+        </div>
+        <h2 style="font-size:20px;margin-bottom:4px">&#9888; Scheduling Conflict</h2>
         <p style="color:#666;margin-top:0">${projectData.name}</p>
         <p>Hi ${personData.display_name},</p>
-        <p>You have been added to <strong>${showStr}</strong> (${showTimeStr}), 
+        <p>You have been added to <strong>${showStr}</strong> (${showTimeStr}),
           but you have unavailability blocks during this period:</p>
         <ul style="padding-left:20px">${blockListHtml}</ul>
         <p style="color:#888;font-size:13px">Please contact your project manager if you have any questions.</p>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px">ShowFlows — Conflict Notification</p>
+        <p style="color:#aaa;font-size:12px">ShowFlows &mdash; Conflict Notification</p>
       </div>
     `
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import UnavailabilityModal from './UnavailabilityModal'
+import { colors, radius, font, transition } from './tokens'
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
@@ -22,24 +23,69 @@ type Props = {
   myRole: Role | null
 }
 
-const blank = {
-  display_name: '',
-  email: '',
-  phone: '',
+const blank = { display_name: '', email: '', phone: '' }
+
+// ── Shared input style ────────────────────────────────────────────────────────
+const inputStyle: React.CSSProperties = {
+  padding: '8px 11px',
+  background: colors.elevated,
+  border: `1px solid ${colors.borderStrong}`,
+  borderRadius: radius.md,
+  color: colors.textPrimary,
+  fontSize: 13,
+  outline: 'none',
+  width: '100%',
+  fontFamily: font.sans,
+}
+
+// ── Shared button styles ──────────────────────────────────────────────────────
+const btnGhost: React.CSSProperties = {
+  padding: '5px 12px',
+  background: 'transparent',
+  border: `1px solid ${colors.borderStrong}`,
+  borderRadius: radius.sm,
+  color: colors.textPrimary,
+  fontSize: 12,
+  cursor: 'pointer',
+  fontFamily: font.sans,
+  transition: `background ${transition.normal}, color ${transition.normal}`,
+}
+
+const btnPrimary: React.CSSProperties = {
+  padding: '7px 16px',
+  background: colors.violet,
+  border: 'none',
+  borderRadius: radius.md,
+  color: 'white',
+  fontSize: 13,
+  fontWeight: 500,
+  cursor: 'pointer',
+  fontFamily: font.sans,
+}
+
+const btnDanger: React.CSSProperties = {
+  padding: '5px 12px',
+  background: 'transparent',
+  border: `1px solid rgba(239,68,68,0.35)`,
+  borderRadius: radius.sm,
+  color: colors.red,
+  fontSize: 12,
+  cursor: 'pointer',
+  fontFamily: font.sans,
 }
 
 export default function People({ projectId, myRole }: Props) {
-  const [people, setPeople] = useState<Person[]>([])
-  const [form, setForm] = useState(blank)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState(blank)
-  const [loading, setLoading] = useState(false)
-  const [msg, setMsg] = useState('')
+  const [people, setPeople]                     = useState<Person[]>([])
+  const [form, setForm]                         = useState(blank)
+  const [editingId, setEditingId]               = useState<string | null>(null)
+  const [editForm, setEditForm]                 = useState(blank)
+  const [loading, setLoading]                   = useState(false)
+  const [msg, setMsg]                           = useState('')
   const [availabilityPerson, setAvailabilityPerson] = useState<Person | null>(null)
 
-  const canEdit = myRole === 'owner' || myRole === 'editor'
-  const canDelete = myRole === 'owner'
-  const canManageAvailability = myRole === 'owner' || myRole === 'editor'
+  const canEdit             = myRole === 'owner' || myRole === 'editor'
+  const canDelete           = myRole === 'owner'
+  const canManageAvailability = myRole === 'owner'
 
   const loadPeople = async () => {
     const { data, error } = await supabase
@@ -47,29 +93,21 @@ export default function People({ projectId, myRole }: Props) {
       .select('id,project_id,display_name,email,phone,is_active,notes,created_at')
       .eq('project_id', projectId)
       .order('display_name', { ascending: true })
-
-    if (error) {
-      setMsg(`Error loading people: ${error.message}`)
-      return
-    }
+    if (error) { setMsg(`Error loading people: ${error.message}`); return }
     setPeople((data ?? []) as Person[])
   }
 
-  useEffect(() => {
-    loadPeople()
-  }, [projectId])
+  useEffect(() => { loadPeople() }, [projectId])
 
   const createPerson = async () => {
     setMsg('')
     if (!form.display_name.trim()) return setMsg('Name is required.')
-    if (!form.email.trim()) return setMsg('Email is required.')
-
     setLoading(true)
     try {
       const { error } = await supabase.from('people').insert({
         project_id: projectId,
         display_name: form.display_name.trim(),
-        email: form.email.trim().toLowerCase(),
+        email: form.email.trim() || null,
         phone: form.phone.trim() || null,
         is_active: true,
       })
@@ -93,24 +131,18 @@ export default function People({ projectId, myRole }: Props) {
     setMsg('')
   }
 
-  const cancelEdit = () => {
-    setEditingId(null)
-    setEditForm(blank)
-    setMsg('')
-  }
+  const cancelEdit = () => { setEditingId(null); setEditForm(blank); setMsg('') }
 
   const saveEdit = async (id: string) => {
     setMsg('')
     if (!editForm.display_name.trim()) return setMsg('Name is required.')
-    if (!editForm.email.trim()) return setMsg('Email is required.')
-
     setLoading(true)
     try {
       const { error } = await supabase
         .from('people')
         .update({
           display_name: editForm.display_name.trim(),
-          email: editForm.email.trim().toLowerCase(),
+          email: editForm.email.trim() || null,
           phone: editForm.phone.trim() || null,
         })
         .eq('id', id)
@@ -142,9 +174,10 @@ export default function People({ projectId, myRole }: Props) {
     else await loadPeople()
   }
 
-  const active = people.filter((p) => p.is_active)
+  const active   = people.filter((p) =>  p.is_active)
   const inactive = people.filter((p) => !p.is_active)
 
+  // ── Inline form (add / edit) ────────────────────────────────────────────────
   const renderForm = (
     values: typeof blank,
     set: (v: typeof blank) => void,
@@ -152,95 +185,121 @@ export default function People({ projectId, myRole }: Props) {
     onCancel?: () => void,
     submitLabel = 'Add Person'
   ) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 400 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 420 }}>
       <input
         placeholder="Name (e.g. John Smith)"
         value={values.display_name}
         onChange={(e) => set({ ...values, display_name: e.target.value })}
-        style={{ padding: 8 }}
+        onKeyDown={(e) => e.key === 'Enter' && onSubmit()}
+        style={inputStyle}
       />
       <input
-        placeholder="Email"
-        type="email"
+        placeholder="Email (optional)"
         value={values.email}
         onChange={(e) => set({ ...values, email: e.target.value })}
-        style={{ padding: 8 }}
+        style={inputStyle}
       />
       <input
         placeholder="Phone (optional)"
         value={values.phone}
         onChange={(e) => set({ ...values, phone: e.target.value })}
-        style={{ padding: 8 }}
+        style={inputStyle}
       />
       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-        <button onClick={onSubmit} disabled={loading}>
+        <button
+          onClick={onSubmit}
+          disabled={loading}
+          style={{ ...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}
+        >
           {loading ? 'Saving…' : submitLabel}
         </button>
         {onCancel && (
-          <button onClick={onCancel} disabled={loading}>Cancel</button>
+          <button onClick={onCancel} disabled={loading} style={btnGhost}>
+            Cancel
+          </button>
         )}
       </div>
     </div>
   )
 
+  // ── Person card ─────────────────────────────────────────────────────────────
   const renderPerson = (person: Person) => {
     const isEditing = editingId === person.id
+    const isInactive = !person.is_active
     return (
       <div
         key={person.id}
         style={{
-          border: '1px solid #ddd',
-          borderRadius: 8,
-          padding: 12,
-          marginBottom: 10,
-          opacity: person.is_active ? 1 : 0.6,
-          background: person.is_active ? 'white' : '#fafafa',
+          border: `1px solid ${colors.border}`,
+          borderRadius: radius.lg,
+          padding: '14px 16px',
+          marginBottom: 8,
+          background: isInactive ? colors.surface : colors.card,
+          opacity: isInactive ? 0.7 : 1,
+          transition: `opacity ${transition.normal}`,
         }}
       >
         {isEditing ? (
           renderForm(editForm, setEditForm, () => saveEdit(person.id), cancelEdit, 'Save')
         ) : (
           <>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>{person.display_name}</div>
-            {person.email && (
-              <div style={{ marginTop: 3, fontSize: 13, opacity: 0.75 }}>{person.email}</div>
-            )}
-            {person.phone && (
-              <div style={{ marginTop: 2, fontSize: 13, opacity: 0.75 }}>{person.phone}</div>
-            )}
-            {!person.email && (
-              <div style={{ marginTop: 3, fontSize: 12, color: '#c00' }}>⚠️ No email — member matching disabled</div>
-            )}
-            {!person.is_active && (
-              <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>Inactive</div>
-            )}
-            <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {canEdit && (
-                <>
-                  <button onClick={() => startEdit(person)}>Edit</button>
-                  <button onClick={() => toggleActive(person)}>
-                    {person.is_active ? 'Mark inactive' : 'Mark active'}
-                  </button>
-                  {canDelete && (
-                    <button onClick={() => deletePerson(person.id)}>Remove</button>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14, color: colors.textPrimary }}>
+                  {person.display_name}
+                  {isInactive && (
+                    <span style={{
+                      marginLeft: 8,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      color: colors.textMuted,
+                      background: colors.elevated,
+                      padding: '2px 6px',
+                      borderRadius: radius.sm,
+                    }}>
+                      Inactive
+                    </span>
                   )}
-                </>
-              )}
-              {canManageAvailability && (
-                <button
-                  onClick={() => setAvailabilityPerson(person)}
-                  style={{
-                    padding: '4px 12px',
-                    background: 'none',
-                    border: '1px solid #bbb',
-                    borderRadius: 6,
-                    fontSize: 13,
-                    cursor: 'pointer',
-                    color: '#444',
-                  }}
-                >
-                  📅 Availability
-                </button>
+                </div>
+                {person.email && (
+                  <div style={{ marginTop: 3, fontSize: 12, color: colors.textSecondary }}>
+                    {person.email}
+                  </div>
+                )}
+                {person.phone && (
+                  <div style={{ marginTop: 2, fontSize: 12, color: colors.textSecondary }}>
+                    {person.phone}
+                  </div>
+                )}
+              </div>
+
+              {/* Action buttons — right aligned */}
+              {canEdit && (
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                  <button onClick={() => startEdit(person)} style={btnGhost}>
+                    Edit
+                  </button>
+                  <button onClick={() => toggleActive(person)} style={btnGhost}>
+                    {person.is_active ? 'Deactivate' : 'Activate'}
+                  </button>
+                  {canManageAvailability && (
+                    <button
+                      onClick={() => setAvailabilityPerson(person)}
+                      style={btnGhost}
+                    >
+                      📅 Availability
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button onClick={() => deletePerson(person.id)} style={btnDanger}>
+                      Remove
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </>
@@ -250,33 +309,59 @@ export default function People({ projectId, myRole }: Props) {
   }
 
   return (
-    <section>
-      <h3 style={{ marginTop: 0 }}>People</h3>
+    <section style={{ fontFamily: font.sans }}>
+      <h3 style={{ marginTop: 0, marginBottom: 20, color: colors.textPrimary, fontSize: 16, fontWeight: 600 }}>
+        People
+      </h3>
 
       {canEdit && (
-        <>
-          <h4 style={{ marginBottom: 8 }}>Add a Person</h4>
+        <div style={{
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: radius.lg,
+          padding: '16px',
+          marginBottom: 28,
+        }}>
+          <h4 style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Add a Person
+          </h4>
           {renderForm(form, setForm, createPerson)}
-        </>
+        </div>
       )}
 
-      {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
+      {msg && (
+        <p style={{ marginBottom: 16, fontSize: 13, color: colors.red }}>{msg}</p>
+      )}
 
-      <div style={{ marginTop: 24 }}>
+      <div>
         {active.length === 0 && inactive.length === 0 && (
-          <p style={{ opacity: 0.8 }}>No people yet — add your first one above.</p>
+          <p style={{ fontSize: 13, color: colors.textMuted }}>
+            No people yet — add your first one above.
+          </p>
         )}
+
         {active.length > 0 && (
           <>
-            <h4 style={{ marginBottom: 8 }}>Active</h4>
+            <div style={{
+              fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
+              letterSpacing: '0.07em', color: colors.textMuted, marginBottom: 8,
+            }}>
+              Active — {active.length}
+            </div>
             {active.map((p) => renderPerson(p))}
           </>
         )}
+
         {inactive.length > 0 && (
-          <>
-            <h4 style={{ marginBottom: 8, marginTop: 20 }}>Inactive</h4>
+          <div style={{ marginTop: 24 }}>
+            <div style={{
+              fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
+              letterSpacing: '0.07em', color: colors.textMuted, marginBottom: 8,
+            }}>
+              Inactive — {inactive.length}
+            </div>
             {inactive.map((p) => renderPerson(p))}
-          </>
+          </div>
         )}
       </div>
 

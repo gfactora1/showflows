@@ -131,41 +131,43 @@ export async function POST(request: Request) {
   // Build block description
   const blockDateStr = startDate === endDate
     ? formatDate(startDate)
-    : `${formatDate(startDate)} — ${formatDate(endDate)}`
+    : `${formatDate(startDate)} \u2014 ${formatDate(endDate)}`
   const blockTimeStr = startTime && endTime
-    ? `${formatTime(startTime)} – ${formatTime(endTime)}`
+    ? `${formatTime(startTime)} \u2014 ${formatTime(endTime)}`
     : 'Full day'
 
   // Build show list HTML
   const showListHtml = conflictingShows.map((s: any) => {
-    const venueName = s.venues?.name ? ` · ${s.venues.name}` : ''
+    const venueName = s.venues?.name ? ` \u00b7 ${s.venues.name}` : ''
     return `<li style="margin-bottom:8px"><strong>${s.title}${venueName}</strong><br>
-      <span style="color:#666;font-size:13px">${formatShowTime(s.starts_at)} → ${formatShowTime(s.ends_at)}</span>
+      <span style="color:#666;font-size:13px">${formatShowTime(s.starts_at)} \u2192 ${formatShowTime(s.ends_at)}</span>
     </li>`
   }).join('')
 
   const noteStr = note ? `<p style="color:#666;font-size:13px">Note: ${note}</p>` : ''
 
-  // 7. Send owner/editor email (digest)
-  const adminSubject = `⚠️ Scheduling conflict — ${projectData.name}`
+  // 7. Send owner/editor email
+  const adminSubject = `Scheduling conflict \u2014 ${projectData.name}`
   const adminHtml = `
     <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-      <h2 style="font-size:20px;margin-bottom:4px">⚠️ Scheduling Conflict</h2>
+      <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #eee">
+        <img src="https://showflows.net/logo.png" alt="ShowFlows" width="120" style="height:auto;display:block" />
+      </div>
+      <h2 style="font-size:20px;margin-bottom:4px">&#9888; Scheduling Conflict</h2>
       <p style="color:#666;margin-top:0">${projectData.name}</p>
-      <p><strong>${personData.display_name}</strong> has been marked unavailable on 
-        <strong>${blockDateStr}</strong> (${blockTimeStr}), but is assigned to 
+      <p><strong>${personData.display_name}</strong> has been marked unavailable on
+        <strong>${blockDateStr}</strong> (${blockTimeStr}), but is assigned to
         ${conflictingShows.length === 1 ? 'a show' : 'shows'} during this period:</p>
       <ul style="padding-left:20px">${showListHtml}</ul>
       ${noteStr}
       <p style="color:#888;font-size:13px">You may need to arrange a fill-in or adjust the lineup.</p>
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-      <p style="color:#aaa;font-size:12px">ShowFlows — Conflict Notification</p>
+      <p style="color:#aaa;font-size:12px">ShowFlows &mdash; Conflict Notification</p>
     </div>
   `
 
   const emailsSent: string[] = []
 
-  // Collect unique admin emails
   const adminEmails = new Set<string>()
   if (ownerMember?.member_email) adminEmails.add(ownerMember.member_email)
   if (triggerMember?.member_email && triggerMember.member_user_id !== ownerMember?.member_user_id) {
@@ -188,19 +190,22 @@ export async function POST(request: Request) {
 
   // 8. Send member email if they have an email address
   if (personData.email && personData.email !== ownerMember?.member_email) {
-    const memberSubject = `⚠️ You have a scheduling conflict — ${projectData.name}`
+    const memberSubject = `Scheduling conflict \u2014 ${projectData.name}`
     const memberHtml = `
       <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-        <h2 style="font-size:20px;margin-bottom:4px">⚠️ Scheduling Conflict</h2>
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #eee">
+          <img src="https://showflows.net/logo.png" alt="ShowFlows" width="120" style="height:auto;display:block" />
+        </div>
+        <h2 style="font-size:20px;margin-bottom:4px">&#9888; Scheduling Conflict</h2>
         <p style="color:#666;margin-top:0">${projectData.name}</p>
         <p>Hi ${personData.display_name},</p>
-        <p>You have been marked unavailable on <strong>${blockDateStr}</strong> (${blockTimeStr}), 
+        <p>You have been marked unavailable on <strong>${blockDateStr}</strong> (${blockTimeStr}),
           but you are assigned to ${conflictingShows.length === 1 ? 'a show' : 'shows'} during this period:</p>
         <ul style="padding-left:20px">${showListHtml}</ul>
         ${noteStr}
         <p style="color:#888;font-size:13px">Please contact your project manager if you have any questions.</p>
         <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-        <p style="color:#aaa;font-size:12px">ShowFlows — Conflict Notification</p>
+        <p style="color:#aaa;font-size:12px">ShowFlows &mdash; Conflict Notification</p>
       </div>
     `
 

@@ -19,15 +19,6 @@ type CalendarData = {
   shows: Show[]
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', {
     hour: 'numeric',
@@ -89,9 +80,7 @@ export default function PublicCalendarClient({ token }: { token: string }) {
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        body {
-          background: #0c0c0e;
-        }
+        body { background: #0c0c0e; }
 
         .cal-root {
           min-height: 100vh;
@@ -137,13 +126,12 @@ export default function PublicCalendarClient({ token }: { token: string }) {
           margin-bottom: 56px;
         }
 
-        .cal-brand {
-          font-size: 11px;
-          font-weight: 500;
-          letter-spacing: 3px;
-          text-transform: uppercase;
-          color: #b8924a;
-          margin-bottom: 20px;
+        /* Logo image — sized for the dark calendar background */
+        .cal-logo {
+          display: block;
+          margin: 0 auto 24px;
+          height: 28px;
+          width: auto;
         }
 
         .cal-name {
@@ -194,9 +182,7 @@ export default function PublicCalendarClient({ token }: { token: string }) {
           border-color: rgba(184, 146, 74, 0.7);
         }
 
-        .cal-month-group {
-          margin-bottom: 48px;
-        }
+        .cal-month-group { margin-bottom: 48px; }
 
         .cal-month-label {
           font-size: 11px;
@@ -218,14 +204,9 @@ export default function PublicCalendarClient({ token }: { token: string }) {
           transition: opacity 0.15s;
         }
 
-        .cal-show-card:last-child {
-          border-bottom: none;
-        }
+        .cal-show-card:last-child { border-bottom: none; }
 
-        .cal-date-col {
-          text-align: center;
-          padding-top: 2px;
-        }
+        .cal-date-col { text-align: center; padding-top: 2px; }
 
         .cal-day-name {
           font-size: 10px;
@@ -262,11 +243,7 @@ export default function PublicCalendarClient({ token }: { token: string }) {
           margin-bottom: 8px;
         }
 
-        .cal-show-meta {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
-        }
+        .cal-show-meta { display: flex; flex-wrap: wrap; gap: 12px; }
 
         .cal-meta-item {
           display: flex;
@@ -277,21 +254,10 @@ export default function PublicCalendarClient({ token }: { token: string }) {
           font-weight: 300;
         }
 
-        .cal-meta-icon {
-          color: #444;
-          font-size: 12px;
-        }
+        .cal-meta-icon { color: #444; font-size: 12px; }
 
-        .cal-empty {
-          text-align: center;
-          padding: 80px 0;
-        }
-
-        .cal-empty-icon {
-          font-size: 40px;
-          margin-bottom: 16px;
-          opacity: 0.4;
-        }
+        .cal-empty { text-align: center; padding: 80px 0; }
+        .cal-empty-icon { font-size: 40px; margin-bottom: 16px; opacity: 0.4; }
 
         .cal-empty-title {
           font-family: 'Playfair Display', Georgia, serif;
@@ -300,16 +266,8 @@ export default function PublicCalendarClient({ token }: { token: string }) {
           margin-bottom: 8px;
         }
 
-        .cal-empty-sub {
-          font-size: 14px;
-          color: #444;
-          font-weight: 300;
-        }
-
-        .cal-error {
-          text-align: center;
-          padding: 80px 0;
-        }
+        .cal-empty-sub { font-size: 14px; color: #444; font-weight: 300; }
+        .cal-error { text-align: center; padding: 80px 0; }
 
         .cal-footer {
           text-align: center;
@@ -318,19 +276,22 @@ export default function PublicCalendarClient({ token }: { token: string }) {
           border-top: 1px solid #1a1a1e;
         }
 
+        /* Footer logo — slightly smaller, links to showflows.net */
+        .cal-footer-logo {
+          display: inline-block;
+          height: 20px;
+          width: auto;
+          opacity: 0.5;
+          transition: opacity 0.2s;
+          vertical-align: middle;
+        }
+
+        .cal-footer-logo:hover { opacity: 0.8; }
+
         .cal-footer-text {
           font-size: 12px;
           color: #333;
           letter-spacing: 0.3px;
-        }
-
-        .cal-footer-link {
-          color: #555;
-          text-decoration: none;
-        }
-
-        .cal-footer-link:hover {
-          color: #b8924a;
         }
 
         @keyframes fadeUp {
@@ -338,10 +299,7 @@ export default function PublicCalendarClient({ token }: { token: string }) {
           to { opacity: 1; transform: translateY(0); }
         }
 
-        .cal-animate {
-          animation: fadeUp 0.5s ease both;
-        }
-
+        .cal-animate { animation: fadeUp 0.5s ease both; }
         .cal-animate-delay-1 { animation-delay: 0.05s; }
         .cal-animate-delay-2 { animation-delay: 0.1s; }
         .cal-animate-delay-3 { animation-delay: 0.15s; }
@@ -362,22 +320,26 @@ export default function PublicCalendarClient({ token }: { token: string }) {
           {error && (
             <div className="cal-error">
               <div className="cal-empty-icon">🔗</div>
-              <div className="cal-empty-title" style={{ color: '#555' }}>
-                {error}
-              </div>
-              <div className="cal-empty-sub">
-                This link may have been revoked or is invalid.
-              </div>
+              <div className="cal-empty-title" style={{ color: '#555' }}>{error}</div>
+              <div className="cal-empty-sub">This link may have been revoked or is invalid.</div>
             </div>
           )}
 
           {data && (
             <>
               <div className="cal-header cal-animate">
-                <div className="cal-brand">ShowFlows</div>
+
+                {/* Logo image — white version works on this dark background */}
+                <img
+                  src="/logo.png"
+                  alt="ShowFlows"
+                  className="cal-logo"
+                />
+
                 <div className="cal-name">{data.name}</div>
                 <div className="cal-subtitle">Upcoming Shows & Performances</div>
                 <div className="cal-divider" />
+
                 {icalUrl && (
                   <a href={icalUrl} className="cal-ical-btn">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -446,12 +408,15 @@ export default function PublicCalendarClient({ token }: { token: string }) {
               )}
 
               <div className="cal-footer">
-                <p className="cal-footer-text">
-                  Powered by{' '}
-                  <a href="https://showflows.net" className="cal-footer-link">
-                    ShowFlows
-                  </a>
-                  {' '}· Schedule management for live performers
+                <a href="https://showflows.net">
+                  <img
+                    src="/logo.png"
+                    alt="ShowFlows"
+                    className="cal-footer-logo"
+                  />
+                </a>
+                <p className="cal-footer-text" style={{ marginTop: 8 }}>
+                  Schedule management for live performers
                 </p>
               </div>
             </>

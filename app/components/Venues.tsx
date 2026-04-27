@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { colors, radius, font, transition } from './tokens'
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
@@ -35,46 +36,98 @@ type Props = {
 
 const CONTACT_TYPES = ['booking', 'day-of', 'general', 'other']
 
-const blankVenue = {
-  name: '',
-  address: '',
-  city: '',
-  state: '',
-  zip: '',
-  notes: '',
-}
-
-const blankContact = {
-  name: '',
-  phone: '',
-  email: '',
-  contact_type: 'general',
-  notes: '',
-}
+const blankVenue = { name: '', address: '', city: '', state: '', zip: '', notes: '' }
+const blankContact = { name: '', phone: '', email: '', contact_type: 'general', notes: '' }
 
 function mapsUrl(venue: Venue) {
-  const parts = [venue.address, venue.city, venue.state, venue.zip]
-    .filter(Boolean)
-    .join(', ')
+  const parts = [venue.address, venue.city, venue.state, venue.zip].filter(Boolean).join(', ')
   return `https://maps.google.com/?q=${encodeURIComponent(parts)}`
 }
 
+// ── Shared styles ─────────────────────────────────────────────────────────────
+
+const inputStyle: React.CSSProperties = {
+  padding: '8px 11px',
+  background: colors.elevated,
+  border: `1px solid ${colors.borderStrong}`,
+  borderRadius: radius.md,
+  color: colors.textPrimary,
+  fontSize: 13,
+  outline: 'none',
+  width: '100%',
+  fontFamily: font.sans,
+  boxSizing: 'border-box',
+}
+
+const selectStyle: React.CSSProperties = {
+  ...inputStyle,
+  cursor: 'pointer',
+}
+
+const btnPrimary: React.CSSProperties = {
+  padding: '7px 16px',
+  background: colors.violet,
+  border: 'none',
+  borderRadius: radius.md,
+  color: 'white',
+  fontSize: 13,
+  fontWeight: 500,
+  cursor: 'pointer',
+  fontFamily: font.sans,
+  whiteSpace: 'nowrap',
+}
+
+const btnGhost: React.CSSProperties = {
+  padding: '5px 12px',
+  background: 'transparent',
+  border: `1px solid ${colors.borderStrong}`,
+  borderRadius: radius.sm,
+  color: colors.textPrimary,
+  fontSize: 12,
+  cursor: 'pointer',
+  fontFamily: font.sans,
+  whiteSpace: 'nowrap',
+}
+
+const btnDanger: React.CSSProperties = {
+  padding: '5px 12px',
+  background: 'transparent',
+  border: `1px solid rgba(252,129,129,0.35)`,
+  borderRadius: radius.sm,
+  color: colors.red,
+  fontSize: 12,
+  cursor: 'pointer',
+  fontFamily: font.sans,
+  whiteSpace: 'nowrap',
+}
+
+const sectionLabel: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.07em',
+  color: colors.textMuted,
+  marginBottom: 8,
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function Venues({ projectId, myRole }: Props) {
-  const [venues, setVenues] = useState<Venue[]>([])
+  const [venues, setVenues]           = useState<Venue[]>([])
   const [libraryVenues, setLibraryVenues] = useState<Venue[]>([])
-  const [contacts, setContacts] = useState<Record<string, VenueContact[]>>({})
-  const [form, setForm] = useState(blankVenue)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState(blankVenue)
+  const [contacts, setContacts]       = useState<Record<string, VenueContact[]>>({})
+  const [form, setForm]               = useState(blankVenue)
+  const [editingId, setEditingId]     = useState<string | null>(null)
+  const [editForm, setEditForm]       = useState(blankVenue)
   const [addingContactForVenueId, setAddingContactForVenueId] = useState<string | null>(null)
   const [contactForm, setContactForm] = useState(blankContact)
   const [librarySearch, setLibrarySearch] = useState('')
   const [showLibrary, setShowLibrary] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [msg, setMsg] = useState('')
+  const [loading, setLoading]         = useState(false)
+  const [msg, setMsg]                 = useState('')
 
-  const isOwner = myRole === 'owner'
-  const canEdit = myRole === 'owner' || myRole === 'editor'
+  const isOwner  = myRole === 'owner'
+  const canEdit  = myRole === 'owner' || myRole === 'editor'
   const canDelete = myRole === 'owner'
 
   const loadVenues = async () => {
@@ -83,32 +136,21 @@ export default function Venues({ projectId, myRole }: Props) {
       .select('id,project_id,name,address,city,state,zip,notes,is_active,created_by_user_id')
       .eq('project_id', projectId)
       .order('name', { ascending: true })
-
-    if (error) {
-      setMsg(`Error loading venues: ${error.message}`)
-      return
-    }
-
+    if (error) { setMsg(`Error loading venues: ${error.message}`); return }
     const list = (data ?? []) as Venue[]
     setVenues(list)
-
-    if (isOwner && list.length > 0) {
-      await loadContacts(list.map((v) => v.id))
-    }
+    if (isOwner && list.length > 0) await loadContacts(list.map((v) => v.id))
   }
 
   const loadContacts = async (venueIds: string[]) => {
     if (venueIds.length === 0) return
-
     const { data, error } = await supabase
       .from('venue_contacts')
       .select('id,venue_id,name,phone,email,contact_type,notes')
       .in('venue_id', venueIds)
       .eq('project_id', projectId)
       .order('created_at', { ascending: true })
-
     if (error) return
-
     const grouped: Record<string, VenueContact[]> = {}
     for (const c of (data ?? []) as VenueContact[]) {
       if (!grouped[c.venue_id]) grouped[c.venue_id] = []
@@ -119,11 +161,9 @@ export default function Venues({ projectId, myRole }: Props) {
 
   const loadLibrary = async () => {
     if (!isOwner) return
-
     const { data: userData } = await supabase.auth.getUser()
     const userId = userData?.user?.id
     if (!userId) return
-
     const { data, error } = await supabase
       .from('venues')
       .select('id,project_id,name,address,city,state,zip,notes,is_active,created_by_user_id')
@@ -131,7 +171,6 @@ export default function Venues({ projectId, myRole }: Props) {
       .neq('project_id', projectId)
       .eq('is_active', true)
       .order('name', { ascending: true })
-
     if (error) return
     setLibraryVenues((data ?? []) as Venue[])
   }
@@ -143,37 +182,26 @@ export default function Venues({ projectId, myRole }: Props) {
 
   const createVenue = async () => {
     setMsg('')
-    if (!form.name.trim()) return setMsg('Venue name is required.')
+    if (!form.name.trim())    return setMsg('Venue name is required.')
     if (!form.address.trim()) return setMsg('Address is required.')
-    if (!form.city.trim()) return setMsg('City is required.')
-
+    if (!form.city.trim())    return setMsg('City is required.')
     setLoading(true)
     try {
       const { data: userData } = await supabase.auth.getUser()
-      const userId = userData?.user?.id
-
       const { error } = await supabase.from('venues').insert({
         project_id: projectId,
-        name: form.name.trim(),
-        address: form.address.trim() || null,
-        city: form.city.trim() || null,
-        state: form.state.trim() || null,
-        zip: form.zip.trim() || null,
-        notes: form.notes.trim() || null,
-        is_active: true,
-        created_by_user_id: userId ?? null,
+        name: form.name.trim(), address: form.address.trim() || null,
+        city: form.city.trim() || null, state: form.state.trim() || null,
+        zip: form.zip.trim() || null, notes: form.notes.trim() || null,
+        is_active: true, created_by_user_id: userData?.user?.id ?? null,
       })
-
       if (error) throw error
-
       setForm(blankVenue)
       await loadVenues()
       if (isOwner) await loadLibrary()
     } catch (e: any) {
       setMsg(`Error adding venue: ${e?.message ?? String(e)}`)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   const addFromLibrary = async (venue: Venue) => {
@@ -181,167 +209,102 @@ export default function Venues({ projectId, myRole }: Props) {
     setLoading(true)
     try {
       const { data: userData } = await supabase.auth.getUser()
-      const userId = userData?.user?.id
-
       const { error } = await supabase.from('venues').insert({
         project_id: projectId,
-        name: venue.name,
-        address: venue.address,
-        city: venue.city,
-        state: venue.state,
-        zip: venue.zip,
-        notes: venue.notes,
-        is_active: true,
-        created_by_user_id: userId ?? null,
+        name: venue.name, address: venue.address, city: venue.city,
+        state: venue.state, zip: venue.zip, notes: venue.notes,
+        is_active: true, created_by_user_id: userData?.user?.id ?? null,
       })
-
       if (error) throw error
-
       setShowLibrary(false)
       setLibrarySearch('')
       await loadVenues()
       await loadLibrary()
     } catch (e: any) {
       setMsg(`Error adding from library: ${e?.message ?? String(e)}`)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   const startEdit = (venue: Venue) => {
     setEditingId(venue.id)
-    setEditForm({
-      name: venue.name,
-      address: venue.address ?? '',
-      city: venue.city ?? '',
-      state: venue.state ?? '',
-      zip: venue.zip ?? '',
-      notes: venue.notes ?? '',
-    })
+    setEditForm({ name: venue.name, address: venue.address ?? '', city: venue.city ?? '',
+      state: venue.state ?? '', zip: venue.zip ?? '', notes: venue.notes ?? '' })
     setMsg('')
   }
-
-  const cancelEdit = () => {
-    setEditingId(null)
-    setEditForm(blankVenue)
-    setMsg('')
-  }
+  const cancelEdit = () => { setEditingId(null); setEditForm(blankVenue); setMsg('') }
 
   const saveEdit = async (id: string) => {
     setMsg('')
-    if (!editForm.name.trim()) return setMsg('Venue name is required.')
+    if (!editForm.name.trim())    return setMsg('Venue name is required.')
     if (!editForm.address.trim()) return setMsg('Address is required.')
-    if (!editForm.city.trim()) return setMsg('City is required.')
-
+    if (!editForm.city.trim())    return setMsg('City is required.')
     setLoading(true)
     try {
-      const { error } = await supabase
-        .from('venues')
-        .update({
-          name: editForm.name.trim(),
-          address: editForm.address.trim() || null,
-          city: editForm.city.trim() || null,
-          state: editForm.state.trim() || null,
-          zip: editForm.zip.trim() || null,
-          notes: editForm.notes.trim() || null,
-        })
-        .eq('id', id)
-
+      const { error } = await supabase.from('venues').update({
+        name: editForm.name.trim(), address: editForm.address.trim() || null,
+        city: editForm.city.trim() || null, state: editForm.state.trim() || null,
+        zip: editForm.zip.trim() || null, notes: editForm.notes.trim() || null,
+      }).eq('id', id)
       if (error) throw error
-
       setEditingId(null)
       setEditForm(blankVenue)
       await loadVenues()
     } catch (e: any) {
       setMsg(`Error saving venue: ${e?.message ?? String(e)}`)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   const toggleActive = async (venue: Venue) => {
-    const { error } = await supabase
-      .from('venues')
-      .update({ is_active: !venue.is_active })
-      .eq('id', venue.id)
-
-    if (error) {
-      setMsg(`Error updating: ${error.message}`)
-      return
-    }
-
-    await loadVenues()
+    const { error } = await supabase.from('venues').update({ is_active: !venue.is_active }).eq('id', venue.id)
+    if (error) setMsg(`Error updating: ${error.message}`)
+    else await loadVenues()
   }
 
   const deleteVenue = async (id: string) => {
     if (!confirm('Delete this venue? This cannot be undone.')) return
     setMsg('')
-
     const { error } = await supabase.from('venues').delete().eq('id', id)
-    if (error) {
-      setMsg(`Error deleting venue: ${error.message}`)
-      return
-    }
-
-    await loadVenues()
-    if (isOwner) await loadLibrary()
+    if (error) setMsg(`Error deleting venue: ${error.message}`)
+    else { await loadVenues(); if (isOwner) await loadLibrary() }
   }
 
   const addContact = async (venueId: string) => {
     setMsg('')
     if (!contactForm.name.trim()) return setMsg('Contact name is required.')
-
     setLoading(true)
     try {
       const { error } = await supabase.from('venue_contacts').insert({
-        venue_id: venueId,
-        project_id: projectId,
-        name: contactForm.name.trim(),
-        phone: contactForm.phone.trim() || null,
-        email: contactForm.email.trim() || null,
-        contact_type: contactForm.contact_type,
+        venue_id: venueId, project_id: projectId,
+        name: contactForm.name.trim(), phone: contactForm.phone.trim() || null,
+        email: contactForm.email.trim() || null, contact_type: contactForm.contact_type,
         notes: contactForm.notes.trim() || null,
       })
-
       if (error) throw error
-
       setAddingContactForVenueId(null)
       setContactForm(blankContact)
       await loadContacts(venues.map((v) => v.id))
     } catch (e: any) {
       setMsg(`Error adding contact: ${e?.message ?? String(e)}`)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   const deleteContact = async (contactId: string) => {
     if (!confirm('Remove this contact?')) return
-
-    const { error } = await supabase
-      .from('venue_contacts')
-      .delete()
-      .eq('id', contactId)
-
-    if (error) {
-      setMsg(`Error removing contact: ${error.message}`)
-      return
-    }
-
-    await loadContacts(venues.map((v) => v.id))
+    const { error } = await supabase.from('venue_contacts').delete().eq('id', contactId)
+    if (error) setMsg(`Error removing contact: ${error.message}`)
+    else await loadContacts(venues.map((v) => v.id))
   }
 
-  const active = venues.filter((v) => v.is_active)
+  const active   = venues.filter((v) =>  v.is_active)
   const inactive = venues.filter((v) => !v.is_active)
-
-  const filteredLibrary = libraryVenues.filter(
-    (v) =>
-      librarySearch.trim() === '' ||
-      v.name.toLowerCase().includes(librarySearch.toLowerCase()) ||
-      (v.city ?? '').toLowerCase().includes(librarySearch.toLowerCase())
+  const filteredLibrary = libraryVenues.filter((v) =>
+    librarySearch.trim() === '' ||
+    v.name.toLowerCase().includes(librarySearch.toLowerCase()) ||
+    (v.city ?? '').toLowerCase().includes(librarySearch.toLowerCase())
   )
-
   const alreadyInProject = new Set(venues.map((v) => v.name.toLowerCase()))
+
+  // ── Venue form ────────────────────────────────────────────────────────────
 
   const renderVenueForm = (
     values: typeof blankVenue,
@@ -351,164 +314,104 @@ export default function Venues({ projectId, myRole }: Props) {
     submitLabel = 'Add Venue'
   ) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 480 }}>
-      <input
-        placeholder="Venue name (e.g. The Chance Theater)"
-        value={values.name}
-        onChange={(e) => set({ ...values, name: e.target.value })}
-        style={{ padding: 8 }}
-      />
-      <input
-        placeholder="Street address"
-        value={values.address}
-        onChange={(e) => set({ ...values, address: e.target.value })}
-        style={{ padding: 8 }}
-      />
+      <input placeholder="Venue name (e.g. The Chance Theater)" value={values.name}
+        onChange={(e) => set({ ...values, name: e.target.value })} style={inputStyle} />
+      <input placeholder="Street address" value={values.address}
+        onChange={(e) => set({ ...values, address: e.target.value })} style={inputStyle} />
       <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          placeholder="City"
-          value={values.city}
+        <input placeholder="City" value={values.city}
           onChange={(e) => set({ ...values, city: e.target.value })}
-          style={{ padding: 8, flex: 2 }}
-        />
-        <input
-          placeholder="State"
-          value={values.state}
+          style={{ ...inputStyle, flex: 2 }} />
+        <input placeholder="State" value={values.state}
           onChange={(e) => set({ ...values, state: e.target.value })}
-          style={{ padding: 8, flex: 1 }}
-        />
-        <input
-          placeholder="Zip"
-          value={values.zip}
+          style={{ ...inputStyle, flex: 1 }} />
+        <input placeholder="Zip" value={values.zip}
           onChange={(e) => set({ ...values, zip: e.target.value })}
-          style={{ padding: 8, flex: 1 }}
-        />
+          style={{ ...inputStyle, flex: 1 }} />
       </div>
-      <input
-        placeholder="Notes (optional — parking, load-in door, etc.)"
-        value={values.notes}
-        onChange={(e) => set({ ...values, notes: e.target.value })}
-        style={{ padding: 8 }}
-      />
+      <input placeholder="Notes (optional — parking, load-in door, etc.)" value={values.notes}
+        onChange={(e) => set({ ...values, notes: e.target.value })} style={inputStyle} />
       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-        <button onClick={onSubmit} disabled={loading}>
+        <button onClick={onSubmit} disabled={loading}
+          style={{ ...btnPrimary, opacity: loading ? 0.6 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
           {loading ? 'Saving…' : submitLabel}
         </button>
-        {onCancel && (
-          <button onClick={onCancel} disabled={loading}>
-            Cancel
-          </button>
-        )}
+        {onCancel && <button onClick={onCancel} disabled={loading} style={btnGhost}>Cancel</button>}
       </div>
     </div>
   )
 
+  // ── Contacts section (owner only) ─────────────────────────────────────────
+
   const renderContacts = (venue: Venue) => {
     if (!isOwner) return null
     const venueContacts = contacts[venue.id] ?? []
-    const isAddingContact = addingContactForVenueId === venue.id
+    const isAdding = addingContactForVenueId === venue.id
 
     return (
-      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f0f0f0' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, opacity: 0.7 }}>
-          Contacts (admin only)
-        </div>
+      <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${colors.border}` }}>
+        <div style={{ ...sectionLabel, marginBottom: 10 }}>Contacts (owner only)</div>
 
         {venueContacts.length > 0 && (
-          <div style={{ marginBottom: 8 }}>
+          <div style={{ marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {venueContacts.map((c) => (
-              <div
-                key={c.id}
-                style={{
-                  fontSize: 13,
-                  padding: '6px 0',
-                  borderBottom: '1px solid #f5f5f5',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  gap: 8,
-                }}
-              >
+              <div key={c.id} style={{
+                fontSize: 12,
+                padding: '8px 10px',
+                background: colors.elevated,
+                borderRadius: radius.sm,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 8,
+              }}>
                 <div>
-                  <span style={{ fontWeight: 500 }}>{c.name}</span>
-                  <span style={{ opacity: 0.6, marginLeft: 6, fontSize: 12 }}>
-                    ({c.contact_type})
-                  </span>
-                  {c.phone && <div style={{ opacity: 0.75 }}>{c.phone}</div>}
-                  {c.email && <div style={{ opacity: 0.75 }}>{c.email}</div>}
-                  {c.notes && (
-                    <div style={{ opacity: 0.6, fontStyle: 'italic' }}>{c.notes}</div>
-                  )}
+                  <span style={{ fontWeight: 600, color: colors.textPrimary }}>{c.name}</span>
+                  <span style={{ color: colors.textMuted, marginLeft: 6 }}>({c.contact_type})</span>
+                  {c.phone && <div style={{ color: colors.textSecondary, marginTop: 2 }}>{c.phone}</div>}
+                  {c.email && <div style={{ color: colors.textSecondary }}>{c.email}</div>}
+                  {c.notes && <div style={{ color: colors.textMuted, fontStyle: 'italic' }}>{c.notes}</div>}
                 </div>
-                <button
-                  onClick={() => deleteContact(c.id)}
-                  style={{ fontSize: 12, flexShrink: 0 }}
-                >
-                  Remove
-                </button>
+                <button onClick={() => deleteContact(c.id)} style={btnDanger}>Remove</button>
               </div>
             ))}
           </div>
         )}
 
-        {isAddingContact ? (
+        {isAdding ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 400 }}>
-            <input
-              placeholder="Contact name"
-              value={contactForm.name}
+            <input placeholder="Contact name" value={contactForm.name}
               onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
-              style={{ padding: 7, fontSize: 13 }}
-            />
-            <select
-              value={contactForm.contact_type}
+              style={{ ...inputStyle, fontSize: 12 }} />
+            <select value={contactForm.contact_type}
               onChange={(e) => setContactForm({ ...contactForm, contact_type: e.target.value })}
-              style={{ padding: 7, fontSize: 13 }}
-            >
+              style={{ ...selectStyle, fontSize: 12 }}>
               {CONTACT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </option>
+                <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
               ))}
             </select>
-            <input
-              placeholder="Phone (optional)"
-              value={contactForm.phone}
+            <input placeholder="Phone (optional)" value={contactForm.phone}
               onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
-              style={{ padding: 7, fontSize: 13 }}
-            />
-            <input
-              placeholder="Email (optional)"
-              value={contactForm.email}
+              style={{ ...inputStyle, fontSize: 12 }} />
+            <input placeholder="Email (optional)" value={contactForm.email}
               onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-              style={{ padding: 7, fontSize: 13 }}
-            />
-            <input
-              placeholder="Notes (optional)"
-              value={contactForm.notes}
+              style={{ ...inputStyle, fontSize: 12 }} />
+            <input placeholder="Notes (optional)" value={contactForm.notes}
               onChange={(e) => setContactForm({ ...contactForm, notes: e.target.value })}
-              style={{ padding: 7, fontSize: 13 }}
-            />
+              style={{ ...inputStyle, fontSize: 12 }} />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => addContact(venue.id)} disabled={loading}>
+              <button onClick={() => addContact(venue.id)} disabled={loading}
+                style={{ ...btnPrimary, fontSize: 12, padding: '5px 12px' }}>
                 {loading ? 'Saving…' : 'Save contact'}
               </button>
-              <button
-                onClick={() => {
-                  setAddingContactForVenueId(null)
-                  setContactForm(blankContact)
-                }}
-              >
-                Cancel
-              </button>
+              <button onClick={() => { setAddingContactForVenueId(null); setContactForm(blankContact) }}
+                style={btnGhost}>Cancel</button>
             </div>
           </div>
         ) : (
           <button
-            onClick={() => {
-              setAddingContactForVenueId(venue.id)
-              setContactForm(blankContact)
-            }}
-            style={{ fontSize: 13 }}
-          >
+            onClick={() => { setAddingContactForVenueId(venue.id); setContactForm(blankContact) }}
+            style={{ ...btnGhost, fontSize: 12 }}>
             + Add contact
           </button>
         )}
@@ -516,69 +419,76 @@ export default function Venues({ projectId, myRole }: Props) {
     )
   }
 
+  // ── Venue card ─────────────────────────────────────────────────────────────
+
   const renderVenue = (venue: Venue) => {
     const isEditing = editingId === venue.id
-    const url = mapsUrl(venue)
     const hasAddress = venue.address || venue.city
 
     return (
-      <div
-        key={venue.id}
-        style={{
-          border: '1px solid #ddd',
-          borderRadius: 8,
-          padding: 12,
-          marginBottom: 10,
-          opacity: venue.is_active ? 1 : 0.6,
-          background: venue.is_active ? 'white' : '#fafafa',
-        }}
-      >
+      <div key={venue.id} style={{
+        background: colors.card,
+        border: `1px solid ${colors.border}`,
+        borderRadius: radius.lg,
+        padding: '14px 16px',
+        marginBottom: 8,
+        opacity: venue.is_active ? 1 : 0.6,
+        transition: `opacity ${transition.normal}`,
+      }}>
         {isEditing ? (
           renderVenueForm(editForm, setEditForm, () => saveEdit(venue.id), cancelEdit, 'Save')
         ) : (
           <>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>{venue.name}</div>
-            {venue.address && (
-              <div style={{ marginTop: 3, fontSize: 13, opacity: 0.75 }}>
-                {venue.address}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: colors.textPrimary }}>
+                  {venue.name}
+                  {!venue.is_active && (
+                    <span style={{
+                      marginLeft: 8, fontSize: 10, fontWeight: 600,
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                      color: colors.textMuted, background: colors.elevated,
+                      padding: '2px 6px', borderRadius: radius.sm,
+                    }}>Inactive</span>
+                  )}
+                </div>
+                {venue.address && (
+                  <div style={{ marginTop: 3, fontSize: 12, color: colors.textSecondary }}>
+                    {venue.address}
+                  </div>
+                )}
+                {(venue.city || venue.state || venue.zip) && (
+                  <div style={{ fontSize: 12, color: colors.textSecondary }}>
+                    {[venue.city, venue.state, venue.zip].filter(Boolean).join(', ')}
+                  </div>
+                )}
+                {venue.notes && (
+                  <div style={{ marginTop: 4, fontSize: 12, color: colors.textMuted, fontStyle: 'italic' }}>
+                    {venue.notes}
+                  </div>
+                )}
               </div>
-            )}
-            {(venue.city || venue.state || venue.zip) && (
-              <div style={{ fontSize: 13, opacity: 0.75 }}>
-                {[venue.city, venue.state, venue.zip].filter(Boolean).join(', ')}
-              </div>
-            )}
-            {venue.notes && (
-              <div style={{ marginTop: 4, fontSize: 13, opacity: 0.65, fontStyle: 'italic' }}>
-                {venue.notes}
-              </div>
-            )}
-            {!venue.is_active && (
-              <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>Inactive</div>
-            )}
-            <div style={{ marginTop: 10, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-              {hasAddress && (
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontSize: 13, color: '#0070f3' }}
-                >
-                  Get directions
-                </a>
-              )}
+
+              {/* Action buttons */}
               {canEdit && (
-                <>
-                  <button onClick={() => startEdit(venue)}>Edit</button>
-                  <button onClick={() => toggleActive(venue)}>
-                    {venue.is_active ? 'Mark inactive' : 'Mark active'}
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                  {hasAddress && (
+                    <a href={mapsUrl(venue)} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 12, color: colors.blue, textDecoration: 'none', padding: '5px 0' }}>
+                      Directions →
+                    </a>
+                  )}
+                  <button onClick={() => startEdit(venue)} style={btnGhost}>Edit</button>
+                  <button onClick={() => toggleActive(venue)} style={btnGhost}>
+                    {venue.is_active ? 'Deactivate' : 'Activate'}
                   </button>
                   {canDelete && (
-                    <button onClick={() => deleteVenue(venue.id)}>Delete</button>
+                    <button onClick={() => deleteVenue(venue.id)} style={btnDanger}>Delete</button>
                   )}
-                </>
+                </div>
               )}
             </div>
+
             {renderContacts(venue)}
           </>
         )}
@@ -586,85 +496,81 @@ export default function Venues({ projectId, myRole }: Props) {
     )
   }
 
-  return (
-    <section>
-      <h3 style={{ marginTop: 0 }}>Venues</h3>
+  // ── Render ────────────────────────────────────────────────────────────────
 
+  return (
+    <section style={{ fontFamily: font.sans }}>
+      <h3 style={{ marginTop: 0, marginBottom: 20, fontSize: 16, fontWeight: 600, color: colors.textPrimary }}>
+        Venues
+      </h3>
+
+      {/* Add venue form */}
       {canEdit && (
-        <>
-          <h4 style={{ marginBottom: 8 }}>Add a Venue</h4>
+        <div style={{
+          background: colors.surface, border: `1px solid ${colors.border}`,
+          borderRadius: radius.lg, padding: 16, marginBottom: 28,
+        }}>
+          <div style={{ ...sectionLabel, marginBottom: 12 }}>Add a Venue</div>
           {renderVenueForm(form, setForm, createVenue)}
-        </>
+        </div>
       )}
 
+      {/* Venue library (owner only) */}
       {isOwner && (
-        <div style={{ marginTop: 20 }}>
+        <div style={{ marginBottom: 20 }}>
           <button
-            onClick={() => {
-              setShowLibrary(!showLibrary)
-              if (!showLibrary) loadLibrary()
-            }}
-            style={{ fontSize: 13 }}
+            onClick={() => { setShowLibrary(!showLibrary); if (!showLibrary) loadLibrary() }}
+            style={btnGhost}
           >
-            {showLibrary ? 'Hide venue library' : 'Search my venue library'}
+            {showLibrary ? 'Hide venue library ▲' : 'Search my venue library ▼'}
           </button>
 
           {showLibrary && (
-            <div
-              style={{
-                marginTop: 12,
-                padding: 12,
-                border: '1px solid #e0e0e0',
-                borderRadius: 8,
-                background: '#fafafa',
-                maxWidth: 560,
-              }}
-            >
-              <p style={{ margin: '0 0 10px', fontSize: 13, opacity: 0.75 }}>
-                Venues you have created across all your projects. Click "Add to this project" to reuse one here.
+            <div style={{
+              marginTop: 10,
+              background: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: radius.lg,
+              padding: 14,
+              maxWidth: 560,
+            }}>
+              <p style={{ margin: '0 0 10px', fontSize: 12, color: colors.textMuted, lineHeight: 1.5 }}>
+                Venues you've created across all your projects. Click "Add" to reuse one here.
               </p>
               <input
                 placeholder="Search by name or city…"
                 value={librarySearch}
                 onChange={(e) => setLibrarySearch(e.target.value)}
-                style={{ padding: 8, width: '100%', marginBottom: 10, boxSizing: 'border-box' }}
+                style={{ ...inputStyle, marginBottom: 10 }}
               />
               {filteredLibrary.length === 0 ? (
-                <p style={{ fontSize: 13, opacity: 0.7, margin: 0 }}>
-                  {libraryVenues.length === 0
-                    ? 'No venues from other projects yet.'
-                    : 'No matches found.'}
+                <p style={{ fontSize: 13, color: colors.textMuted, margin: 0 }}>
+                  {libraryVenues.length === 0 ? 'No venues from other projects yet.' : 'No matches found.'}
                 </p>
               ) : (
                 filteredLibrary.map((v) => {
                   const already = alreadyInProject.has(v.name.toLowerCase())
                   return (
-                    <div
-                      key={v.id}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '8px 0',
-                        borderBottom: '1px solid #eee',
-                        gap: 8,
-                      }}
-                    >
+                    <div key={v.id} style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 0',
+                      borderBottom: `1px solid ${colors.border}`,
+                      gap: 8,
+                    }}>
                       <div>
-                        <div style={{ fontSize: 14, fontWeight: 500 }}>{v.name}</div>
-                        <div style={{ fontSize: 13, opacity: 0.7 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: colors.textPrimary }}>{v.name}</div>
+                        <div style={{ fontSize: 12, color: colors.textMuted }}>
                           {[v.address, v.city, v.state].filter(Boolean).join(', ')}
                         </div>
                       </div>
                       {already ? (
-                        <span style={{ fontSize: 12, opacity: 0.5 }}>Already added</span>
+                        <span style={{ fontSize: 11, color: colors.textMuted }}>Already added</span>
                       ) : (
-                        <button
-                          onClick={() => addFromLibrary(v)}
-                          disabled={loading}
-                          style={{ fontSize: 13, flexShrink: 0 }}
-                        >
-                          Add to this project
+                        <button onClick={() => addFromLibrary(v)} disabled={loading}
+                          style={{ ...btnGhost, fontSize: 12 }}>
+                          Add
                         </button>
                       )}
                     </div>
@@ -676,25 +582,26 @@ export default function Venues({ projectId, myRole }: Props) {
         </div>
       )}
 
-      {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
+      {msg && <p style={{ color: colors.red, fontSize: 13, marginBottom: 16 }}>{msg}</p>}
 
-      <div style={{ marginTop: 24 }}>
+      {/* Venue lists */}
+      <div>
         {active.length === 0 && inactive.length === 0 && (
-          <p style={{ opacity: 0.8 }}>No venues yet — add your first one above.</p>
+          <p style={{ fontSize: 13, color: colors.textMuted }}>No venues yet — add your first one above.</p>
         )}
 
         {active.length > 0 && (
           <>
-            <h4 style={{ marginBottom: 8 }}>Active</h4>
+            <div style={sectionLabel}>Active — {active.length}</div>
             {active.map((v) => renderVenue(v))}
           </>
         )}
 
         {inactive.length > 0 && (
-          <>
-            <h4 style={{ marginBottom: 8, marginTop: 20 }}>Inactive</h4>
+          <div style={{ marginTop: 24 }}>
+            <div style={sectionLabel}>Inactive — {inactive.length}</div>
             {inactive.map((v) => renderVenue(v))}
-          </>
+          </div>
         )}
       </div>
     </section>

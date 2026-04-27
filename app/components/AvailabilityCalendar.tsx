@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { colors, radius, font, transition } from './tokens'
 
 type Props = {
   projectId: string
@@ -12,7 +13,6 @@ type Show = {
   title: string
   starts_at: string
   ends_at: string
-  venue_name: string | null
 }
 
 type Block = {
@@ -26,7 +26,7 @@ type Block = {
   note: string | null
 }
 
-type DayStatus = 'booked' | 'blocked' | 'clear' | 'past'
+type DayStatus = 'booked' | 'blocked' | 'both' | 'clear' | 'past'
 
 type DayData = {
   shows: Show[]
@@ -69,14 +69,24 @@ function todayStr() {
   return new Date().toISOString().split('T')[0]
 }
 
+// ── Status appearance map ─────────────────────────────────────────────────────
+const STATUS_STYLE: Record<DayStatus, { bg: string; border: string; dot: string }> = {
+  booked:  { bg: colors.redSoft,   border: 'rgba(239,68,68,0.5)',    dot: colors.red },
+  blocked: { bg: colors.amberSoft, border: 'rgba(245,158,11,0.5)',   dot: colors.amber },
+  both:    { bg: colors.redSoft,   border: 'rgba(239,68,68,0.5)',    dot: colors.red },
+  clear:   { bg: colors.greenSoft, border: 'rgba(34,197,94,0.35)',   dot: colors.green },
+  past:    { bg: colors.card,      border: colors.border,             dot: colors.textDim },
+}
+
 export default function AvailabilityCalendar({ projectId }: Props) {
   const now = new Date()
-  const [viewYear, setViewYear] = useState(now.getFullYear())
+  const [viewYear, setViewYear]   = useState(now.getFullYear())
   const [viewMonth, setViewMonth] = useState(now.getMonth())
-  const [dayMap, setDayMap] = useState<Record<string, DayData>>({})
-  const [loading, setLoading] = useState(false)
-  const [errorMsg, setErrorMsg] = useState('')
-  const [popover, setPopover] = useState<PopoverData | null>(null)
+  const [dayMap, setDayMap]       = useState<Record<string, DayData>>({})
+  const [loading, setLoading]     = useState(false)
+  const [errorMsg, setErrorMsg]   = useState('')
+  const [popover, setPopover]     = useState<PopoverData | null>(null)
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null)
 
   const today = todayStr()
 
@@ -86,27 +96,16 @@ export default function AvailabilityCalendar({ projectId }: Props) {
     setPopover(null)
 
     const firstDay = toDateStr(year, month, 1)
-    const lastDay = toDateStr(year, month, new Date(year, month + 1, 0).getDate())
+    const lastDay  = toDateStr(year, month, new Date(year, month + 1, 0).getDate())
 
     try {
-      // Load shows with venue name joined
       const { data: showData, error: showError } = await supabase
         .from('shows')
-        .select('id, title, starts_at, ends_at, venues(name)')
+        .select('id, title, starts_at, ends_at')
         .eq('project_id', projectId)
 
       if (showError) throw showError
 
-      // Normalize venue name out of nested object
-      const shows: Show[] = (showData ?? []).map((s: any) => ({
-        id: s.id,
-        title: s.title,
-        starts_at: s.starts_at,
-        ends_at: s.ends_at,
-        venue_name: s.venues?.name ?? null,
-      }))
-
-      // Load active people in this project
       const { data: peopleData, error: peopleError } = await supabase
         .from('people')
         .select('id, display_name')
@@ -121,7 +120,6 @@ export default function AvailabilityCalendar({ projectId }: Props) {
         peopleMap[p.id] = p.display_name
       })
 
-      // Load blocks that overlap this month
       let blocks: Block[] = []
       if (peopleIds.length > 0) {
         const { data: blockData, error: blockError } = await supabase
@@ -139,27 +137,26 @@ export default function AvailabilityCalendar({ projectId }: Props) {
         }))
       }
 
-      // Build day map for this month
       const daysInMonth = new Date(year, month + 1, 0).getDate()
       const newDayMap: Record<string, DayData> = {}
 
       for (let d = 1; d <= daysInMonth; d++) {
         const dateStr = toDateStr(year, month, d)
-        const isPast = dateStr < today
+        const isPast  = dateStr < today
 
-        const dayShows = shows.filter((s) => {
+        const dayShows = (showData ?? []).filter((s: Show) => {
           const showStart = s.starts_at.split('T')[0]
-          const showEnd = s.ends_at.split('T')[0]
+          const showEnd   = s.ends_at.split('T')[0]
           return showStart <= dateStr && showEnd >= dateStr
         })
 
-        const dayBlocks = blocks.filter((b) => {
-          return b.start_date <= dateStr && b.end_date >= dateStr
-        })
+        const dayBlocks = blocks.filter((b) => b.start_date <= dateStr && b.end_date >= dateStr)
 
         let status: DayStatus
         if (isPast) {
           status = 'past'
+        } else if (dayShows.length > 0 && dayBlocks.length > 0) {
+          status = 'both'
         } else if (dayShows.length > 0) {
           status = 'booked'
         } else if (dayBlocks.length > 0) {
@@ -184,21 +181,13 @@ export default function AvailabilityCalendar({ projectId }: Props) {
   }, [viewYear, viewMonth, loadMonth])
 
   const prevMonth = () => {
-    if (viewMonth === 0) {
-      setViewYear(y => y - 1)
-      setViewMonth(11)
-    } else {
-      setViewMonth(m => m - 1)
-    }
+    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11) }
+    else setViewMonth(m => m - 1)
   }
 
   const nextMonth = () => {
-    if (viewMonth === 11) {
-      setViewYear(y => y + 1)
-      setViewMonth(0)
-    } else {
-      setViewMonth(m => m + 1)
-    }
+    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0) }
+    else setViewMonth(m => m + 1)
   }
 
   const handleDayClick = (dateStr: string, dayData: DayData, e: React.MouseEvent) => {
@@ -206,7 +195,11 @@ export default function AvailabilityCalendar({ projectId }: Props) {
       setPopover(null)
       return
     }
-    const rect = (e.target as HTMLElement).getBoundingClientRect()
+    if (popover?.date === dateStr) {
+      setPopover(null)
+      return
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setPopover({
       date: dateStr,
       shows: dayData.shows,
@@ -216,164 +209,185 @@ export default function AvailabilityCalendar({ projectId }: Props) {
     })
   }
 
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+  const daysInMonth    = new Date(viewYear, viewMonth + 1, 0).getDate()
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay()
-
-  const dayColors: Record<DayStatus, string> = {
-    booked: '#ffdddd',
-    blocked: '#fff8dd',
-    clear: '#edfff3',
-    past: '#f5f5f5',
-  }
-
-  const dayBorders: Record<DayStatus, string> = {
-    booked: '#ffaaaa',
-    blocked: '#ffe080',
-    clear: '#b2f0c8',
-    past: '#e5e5e5',
-  }
-
-  const dayDots: Record<DayStatus, string> = {
-    booked: '#cc0000',
-    blocked: '#c8860a',
-    clear: '#1a7a3a',
-    past: '#ccc',
-  }
-
-  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const dayLabels      = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
   return (
-    <section>
-      <h3 style={{ marginTop: 0 }}>Availability</h3>
-      <p style={{ opacity: 0.7, fontSize: 14, marginBottom: 20, maxWidth: 520 }}>
-        Monthly view of shows and member availability. Click any highlighted date for details.
+    <section style={{ fontFamily: font.sans }}>
+      <h3 style={{ marginTop: 0, color: colors.textPrimary, fontSize: 17, fontWeight: 700, marginBottom: 6 }}>
+        Availability
+      </h3>
+      <p style={{ fontSize: 13, color: colors.textMuted, marginBottom: 20, maxWidth: 520 }}>
+        Monthly view of shows and member availability blocks. Click any highlighted date for details.
       </p>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 14, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
-          { color: '#cc0000', bg: '#ffdddd', label: 'Show booked' },
-          { color: '#c8860a', bg: '#fff8dd', label: 'Member blocked' },
-          { color: '#1a7a3a', bg: '#edfff3', label: 'Clear' },
-        ].map(({ color, bg, label }) => (
+          { style: STATUS_STYLE.booked,  label: 'Show booked' },
+          { style: STATUS_STYLE.blocked, label: 'Member blocked' },
+          { style: STATUS_STYLE.clear,   label: 'Clear' },
+        ].map(({ style, label }) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{
-              width: 14, height: 14, borderRadius: 3,
-              background: bg, border: `1.5px solid ${color}`,
+              width: 14, height: 14, borderRadius: radius.sm,
+              background: style.bg, border: `1.5px solid ${style.border}`,
+              flexShrink: 0,
             }} />
-            <span style={{ fontSize: 13, color: '#555' }}>{label}</span>
+            <span style={{ fontSize: 12, color: colors.textSecondary }}>{label}</span>
           </div>
         ))}
       </div>
 
       {/* Month navigation */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <button
           onClick={prevMonth}
           style={{
-            background: 'none', border: '1px solid #ddd', borderRadius: 6,
-            padding: '6px 12px', cursor: 'pointer', fontSize: 16, color: '#333',
+            background: colors.card, border: `1px solid ${colors.border}`,
+            borderRadius: radius.md, padding: '6px 12px', cursor: 'pointer',
+            fontSize: 16, color: colors.textSecondary, fontFamily: font.sans,
           }}
-        >
-          ‹
-        </button>
-        <div style={{ fontWeight: 700, fontSize: 16, minWidth: 160, textAlign: 'center' }}>
+          onMouseEnter={(e) => (e.currentTarget.style.background = colors.elevated)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = colors.card)}
+        >‹</button>
+        <div style={{ fontWeight: 700, fontSize: 15, minWidth: 160, textAlign: 'center', color: colors.textPrimary }}>
           {formatMonthYear(viewYear, viewMonth)}
         </div>
         <button
           onClick={nextMonth}
           style={{
-            background: 'none', border: '1px solid #ddd', borderRadius: 6,
-            padding: '6px 12px', cursor: 'pointer', fontSize: 16, color: '#333',
+            background: colors.card, border: `1px solid ${colors.border}`,
+            borderRadius: radius.md, padding: '6px 12px', cursor: 'pointer',
+            fontSize: 16, color: colors.textSecondary, fontFamily: font.sans,
           }}
-        >
-          ›
-        </button>
-        {loading && <span style={{ fontSize: 13, color: '#999' }}>Loading…</span>}
+          onMouseEnter={(e) => (e.currentTarget.style.background = colors.elevated)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = colors.card)}
+        >›</button>
+        {loading && <span style={{ fontSize: 13, color: colors.textMuted }}>Loading…</span>}
       </div>
 
       {errorMsg && (
-        <p style={{ color: '#c00', fontSize: 13, marginBottom: 12 }}>{errorMsg}</p>
+        <p style={{ color: colors.red, fontSize: 13, marginBottom: 12 }}>{errorMsg}</p>
       )}
 
-      {/* Calendar grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(7, 1fr)',
-        gap: 4,
-        maxWidth: 560,
-      }}>
-        {/* Day headers */}
-        {dayLabels.map((d) => (
-          <div key={d} style={{
-            textAlign: 'center', fontSize: 12, fontWeight: 600,
-            color: '#888', paddingBottom: 6,
+      {/* ── Calendar ── */}
+      {/* cal* are grid-local constants — intentionally outside system tokens */}
+      {(() => {
+        const calContainer    = '#131424'
+        const calCell         = '#3E4268'
+        const calPastCell     = '#2E3152'
+        const calCellHover    = '#4A4F7A'
+        const calBorderFuture = 'rgba(255,255,255,0.18)'
+        const calBorderPast   = 'rgba(255,255,255,0.10)'
+
+        const STATUS_STRONG: Record<DayStatus, { bg: string; border: string; dot: string }> = {
+          booked:  { bg: 'rgba(239,68,68,0.25)',    border: 'rgba(239,68,68,0.75)',   dot: colors.red },
+          blocked: { bg: 'rgba(245,158,11,0.25)',   border: 'rgba(245,158,11,0.75)',  dot: colors.amber },
+          both:    { bg: 'rgba(239,68,68,0.25)',    border: 'rgba(239,68,68,0.75)',   dot: colors.red },
+          clear:   { bg: 'rgba(34,197,94,0.18)',    border: 'rgba(34,197,94,0.6)',    dot: colors.green },
+          past:    { bg: calPastCell,               border: calBorderPast,            dot: colors.textMuted },
+        }
+
+        return (
+          <div style={{
+            background: calContainer,
+            border: `1px solid rgba(255,255,255,0.1)`,
+            borderRadius: radius.xl,
+            padding: 12,
+            maxWidth: 560,
           }}>
-            {d}
-          </div>
-        ))}
-
-        {/* Empty cells before first day */}
-        {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-          <div key={`empty-${i}`} />
-        ))}
-
-        {/* Day cells */}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const day = i + 1
-          const dateStr = toDateStr(viewYear, viewMonth, day)
-          const dayData = dayMap[dateStr]
-          const status = dayData?.status ?? 'clear'
-          const isToday = dateStr === today
-          const hasDetail = dayData && (dayData.shows.length > 0 || dayData.blocks.length > 0)
-          const isSelected = popover?.date === dateStr
-
-          return (
-            <div
-              key={dateStr}
-              onClick={(e) => dayData && handleDayClick(dateStr, dayData, e)}
-              style={{
-                aspectRatio: '1',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 8,
-                border: isSelected
-                  ? '2px solid #333'
-                  : `1.5px solid ${dayData ? dayBorders[status] : '#e5e5e5'}`,
-                background: dayData ? dayColors[status] : '#f9f9f9',
-                cursor: hasDetail ? 'pointer' : 'default',
-                position: 'relative',
-                transition: 'transform 0.1s',
-                transform: isSelected ? 'scale(1.08)' : 'scale(1)',
-              }}
-            >
-              <span style={{
-                fontSize: 13,
-                fontWeight: isToday ? 700 : 400,
-                color: isToday ? '#111' : status === 'past' ? '#bbb' : '#333',
-              }}>
-                {day}
-              </span>
-              {isToday && (
-                <div style={{
-                  width: 4, height: 4, borderRadius: '50%',
-                  background: '#333', marginTop: 2,
-                }} />
-              )}
-              {hasDetail && !isToday && (
-                <div style={{
-                  width: 4, height: 4, borderRadius: '50%',
-                  background: dayDots[status], marginTop: 2,
-                }} />
-              )}
+            {/* Day headers */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 4 }}>
+              {dayLabels.map((d) => (
+                <div key={d} style={{
+                  textAlign: 'center', fontSize: 11, fontWeight: 600,
+                  color: colors.textSecondary, paddingBottom: 6, letterSpacing: '0.04em',
+                }}>
+                  {d}
+                </div>
+              ))}
             </div>
-          )
-        })}
-      </div>
 
-      {/* Popover */}
+            {/* Day grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+              {Array.from({ length: firstDayOfWeek }).map((_, i) => <div key={`empty-${i}`} />)}
+
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const day       = i + 1
+                const dateStr   = toDateStr(viewYear, viewMonth, day)
+                const dayData   = dayMap[dateStr]
+                const status    = dayData?.status ?? 'clear'
+                const isToday   = dateStr === today
+                const hasDetail = !!(dayData && (dayData.shows.length > 0 || dayData.blocks.length > 0))
+                const isSelected = popover?.date === dateStr
+                const isPast    = dateStr < today
+                const isHovered = hoveredDate === dateStr && !isSelected
+
+                const st = STATUS_STRONG[status]
+
+                // NO opacity — color-only dimming for uniform row brightness
+                // Status fills (redSoft/amberSoft/greenSoft) ARE the brightness signal for this calendar
+                let bg        = isPast ? calPastCell : (hasDetail ? st.bg : calCell)
+                let border    = isPast ? calBorderPast : (hasDetail ? st.border : calBorderFuture)
+                let bw        = hasDetail ? '1.5px' : '1px'
+                let numColor  = isPast ? colors.textDim : colors.textPrimary
+                let boxShadow = 'none'
+                let dotOpacity = isPast ? 0.5 : 1
+
+                if (isSelected) {
+                  bg = colors.violet; border = colors.violet; bw = '2px'; numColor = '#fff'; boxShadow = 'none'; dotOpacity = 1
+                } else if (isToday) {
+                  if (!hasDetail) bg = 'rgba(41,95,255,0.15)'
+                  border = colors.blue; bw = '2px'; numColor = colors.textPrimary
+                  boxShadow = '0 0 0 2px rgba(41,95,255,0.25)'
+                }
+
+                if (isHovered) { bg = calCellHover; boxShadow = 'none' }
+
+                return (
+                  <div
+                    key={dateStr}
+                    onClick={(e) => dayData && handleDayClick(dateStr, dayData, e)}
+                    onMouseEnter={() => setHoveredDate(dateStr)}
+                    onMouseLeave={() => setHoveredDate(null)}
+                    style={{
+                      aspectRatio: '1',
+                      display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                      borderRadius: radius.md,
+                      border: `${bw} solid ${border}`,
+                      background: bg,
+                      boxShadow,
+                      cursor: hasDetail ? 'pointer' : 'default',
+                      transition: `background ${transition.fast}`,
+                      userSelect: 'none',
+                    }}
+                  >
+                    <span style={{
+                      fontSize: 13, fontWeight: (isToday || hasDetail) ? 600 : 400,
+                      color: numColor, lineHeight: 1,
+                    }}>
+                      {day}
+                    </span>
+                    {(hasDetail || isToday) && (
+                      <div style={{
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: hasDetail ? st.dot : colors.blue,
+                        marginTop: 2, flexShrink: 0,
+                        opacity: hasDetail ? dotOpacity : 1,
+                      }} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── Popover ── */}
       {popover && (
         <>
           <div
@@ -382,18 +396,18 @@ export default function AvailabilityCalendar({ projectId }: Props) {
           />
           <div style={{
             position: 'fixed',
-            top: Math.min(popover.y, window.innerHeight - 320),
-            left: Math.min(popover.x, window.innerWidth - 300),
+            top: Math.min(popover.y, window.innerHeight - 300),
+            left: Math.min(popover.x, window.innerWidth - 320),
             zIndex: 100,
-            background: 'white',
-            border: '1px solid #ddd',
-            borderRadius: 10,
+            background: colors.surface,
+            border: `1px solid ${colors.borderStrong}`,
+            borderRadius: radius.xl,
             padding: 16,
             minWidth: 260,
-            maxWidth: 300,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+            maxWidth: 310,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
           }}>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: '#111' }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: colors.textPrimary }}>
               {formatDate(popover.date)}
             </div>
 
@@ -401,25 +415,20 @@ export default function AvailabilityCalendar({ projectId }: Props) {
             {popover.shows.length > 0 && (
               <div style={{ marginBottom: popover.blocks.length > 0 ? 12 : 0 }}>
                 <div style={{
-                  fontSize: 11, fontWeight: 600, color: '#cc0000',
-                  textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
+                  fontSize: 11, fontWeight: 700, color: colors.red,
+                  textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6,
                 }}>
-                  {popover.shows.length === 1 ? 'Show Booked' : `${popover.shows.length} Shows Booked`}
+                  Show Booked
                 </div>
                 {popover.shows.map((show) => (
                   <div key={show.id} style={{
                     padding: '8px 10px',
-                    background: '#fff0f0',
-                    border: '1px solid #ffcccc',
-                    borderRadius: 6,
-                    marginBottom: 6,
+                    background: colors.redSoft,
+                    border: `1px solid rgba(239,68,68,0.3)`,
+                    borderRadius: radius.md,
+                    marginBottom: 5,
                   }}>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{show.title}</div>
-                    {show.venue_name && (
-                      <div style={{ fontSize: 12, color: '#888', marginTop: 3 }}>
-                        📍 {show.venue_name}
-                      </div>
-                    )}
+                    <div style={{ fontWeight: 600, fontSize: 13, color: colors.textPrimary }}>{show.title}</div>
                   </div>
                 ))}
               </div>
@@ -429,28 +438,27 @@ export default function AvailabilityCalendar({ projectId }: Props) {
             {popover.blocks.length > 0 && (
               <div>
                 <div style={{
-                  fontSize: 11, fontWeight: 600, color: '#c8860a',
-                  textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
+                  fontSize: 11, fontWeight: 700, color: colors.amber,
+                  textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6,
                 }}>
                   Member Blocks
                 </div>
                 {popover.blocks.map((block) => (
                   <div key={block.id} style={{
                     padding: '8px 10px',
-                    background: '#fffbf0',
-                    border: '1px solid #ffe0a0',
-                    borderRadius: 6,
-                    marginBottom: 6,
+                    background: colors.amberSoft,
+                    border: `1px solid rgba(245,158,11,0.3)`,
+                    borderRadius: radius.md,
+                    marginBottom: 5,
                   }}>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{block.display_name}</div>
-                    <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: colors.textPrimary }}>{block.display_name}</div>
+                    <div style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
                       {block.start_time && block.end_time
                         ? `${formatTime(block.start_time)} – ${formatTime(block.end_time)}`
-                        : 'Full day'
-                      }
+                        : 'Full day'}
                     </div>
                     {block.note && (
-                      <div style={{ fontSize: 12, color: '#aaa', marginTop: 2 }}>{block.note}</div>
+                      <div style={{ fontSize: 12, color: colors.textMuted, marginTop: 2, fontStyle: 'italic' }}>{block.note}</div>
                     )}
                   </div>
                 ))}
@@ -460,10 +468,13 @@ export default function AvailabilityCalendar({ projectId }: Props) {
             <button
               onClick={() => setPopover(null)}
               style={{
-                marginTop: 10, width: '100%', padding: '6px 0',
-                background: 'none', border: '1px solid #ddd', borderRadius: 6,
-                fontSize: 12, color: '#666', cursor: 'pointer',
+                marginTop: 10, width: '100%', padding: '7px 0',
+                background: 'transparent', border: `1px solid ${colors.border}`,
+                borderRadius: radius.md, fontSize: 12, color: colors.textSecondary,
+                cursor: 'pointer', fontFamily: font.sans,
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = colors.elevated)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
               Close
             </button>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
+import { colors, radius, font } from './tokens'
 
 type Project = {
   id: string
@@ -38,6 +39,24 @@ function isValidEmail(input: string) {
   return v.includes('@') && v.includes('.') && v.length >= 6
 }
 
+const roleBadgeStyle = (role: Role): React.CSSProperties => {
+  if (role === 'owner') return {
+    fontSize: 11, fontWeight: 600, color: colors.violetLight,
+    background: colors.violetSoft, border: `1px solid ${colors.violetSoft2}`,
+    borderRadius: radius.full, padding: '2px 8px',
+  }
+  if (role === 'editor') return {
+    fontSize: 11, fontWeight: 600, color: colors.textSecondary,
+    background: colors.elevated, border: `1px solid ${colors.border}`,
+    borderRadius: radius.full, padding: '2px 8px',
+  }
+  return {
+    fontSize: 11, fontWeight: 600, color: colors.textMuted,
+    background: colors.card, border: `1px solid ${colors.border}`,
+    borderRadius: radius.full, padding: '2px 8px',
+  }
+}
+
 export default function ProjectMembers({ project }: { project: Project }) {
   const [members, setMembers] = useState<Member[]>([])
   const [invites, setInvites] = useState<Invite[]>([])
@@ -48,12 +67,11 @@ export default function ProjectMembers({ project }: { project: Project }) {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Exclude<Role, 'owner'>>('member')
   const [isManaged, setIsManaged] = useState(false)
-
-  // For non-managed members, default to invite flow
   const [sendInviteEmail, setSendInviteEmail] = useState(true)
 
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
+  const [msgIsError, setMsgIsError] = useState(false)
 
   const trimmedEmail = useMemo(() => email.trim().toLowerCase(), [email])
 
@@ -85,7 +103,6 @@ export default function ProjectMembers({ project }: { project: Project }) {
     return roleFound
   }
 
-  // ✅ Only load *pending* invites from DB so accepted invites can never “reappear”
   const loadPendingInvites = async () => {
     if (!canManage) {
       setInvites([])
@@ -115,6 +132,7 @@ export default function ProjectMembers({ project }: { project: Project }) {
         setInvites([])
       }
     } catch (e: any) {
+      setMsgIsError(true)
       setMsg(`Error loading: ${e?.message ?? String(e)}`)
     }
   }
@@ -125,7 +143,6 @@ export default function ProjectMembers({ project }: { project: Project }) {
   }, [project.id])
 
   useEffect(() => {
-    // If managed, we never send invites
     if (isManaged) setSendInviteEmail(false)
   }, [isManaged])
 
@@ -139,14 +156,11 @@ export default function ProjectMembers({ project }: { project: Project }) {
     if (error) throw error
   }
 
-  // Cookie-auth (SSR) invite creation endpoint: NO bearer token required.
   const createInviteAndSendEmail = async () => {
     const res = await fetch('/api/invites/create', {
       method: 'POST',
-      credentials: 'include', // explicit; same-origin cookies are required
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         projectId: project.id,
         invitedEmail: trimmedEmail,
@@ -160,10 +174,12 @@ export default function ProjectMembers({ project }: { project: Project }) {
       throw new Error(`Invite API failed (${res.status}). ${text || 'Check /api/invites/create'}`)
     }
 
-    // surface warning if API returns one
     try {
       const json = JSON.parse(text || '{}')
-      if (json?.warning) setMsg(String(json.warning))
+      if (json?.warning) {
+        setMsgIsError(false)
+        setMsg(String(json.warning))
+      }
     } catch {
       // ignore
     }
@@ -172,31 +188,23 @@ export default function ProjectMembers({ project }: { project: Project }) {
   const addMember = async () => {
     setMsg('')
 
-    if (!canManage) {
-      setMsg('Not allowed.')
-      return
-    }
-
-    if (!trimmedEmail) {
-      setMsg('Please enter an email.')
-      return
-    }
-    if (!isValidEmail(trimmedEmail)) {
-      setMsg('That email does not look valid.')
-      return
-    }
+    if (!canManage) return setMsg('Not allowed.')
+    if (!trimmedEmail) return setMsg('Please enter an email.')
+    if (!isValidEmail(trimmedEmail)) return setMsg('That email does not look valid.')
 
     setLoading(true)
     try {
       if (isManaged) {
         await addMemberDirect()
+        setMsgIsError(false)
         setMsg('Managed member added.')
       } else {
         if (sendInviteEmail) {
           await createInviteAndSendEmail()
-          setMsg((prev) => prev || 'Invite created.')
+          if (!msg) { setMsgIsError(false); setMsg('Invite sent.') }
         } else {
           await addMemberDirect()
+          setMsgIsError(false)
           setMsg('Member added (no invite sent).')
         }
       }
@@ -207,6 +215,7 @@ export default function ProjectMembers({ project }: { project: Project }) {
       setSendInviteEmail(true)
       await refresh()
     } catch (e: any) {
+      setMsgIsError(true)
       setMsg(e?.message ?? String(e))
     } finally {
       setLoading(false)
@@ -220,6 +229,7 @@ export default function ProjectMembers({ project }: { project: Project }) {
     const { error } = await supabase.from('project_members').update(patch).eq('id', id)
 
     if (error) {
+      setMsgIsError(true)
       setMsg(`Error updating member: ${error.message}`)
       return
     }
@@ -229,13 +239,12 @@ export default function ProjectMembers({ project }: { project: Project }) {
 
   const removeMember = async (id: string) => {
     if (!canManage) return
+    if (!confirm('Remove this member?')) return
 
     setMsg('')
-    const ok = confirm('Remove this member?')
-    if (!ok) return
-
     const { error } = await supabase.from('project_members').delete().eq('id', id)
     if (error) {
+      setMsgIsError(true)
       setMsg(`Error removing member: ${error.message}`)
       return
     }
@@ -245,13 +254,12 @@ export default function ProjectMembers({ project }: { project: Project }) {
 
   const revokeInvite = async (inviteId: string) => {
     if (!canManage) return
+    if (!confirm('Revoke this invite?')) return
 
     setMsg('')
-    const ok = confirm('Revoke this invite?')
-    if (!ok) return
-
     const { error } = await supabase.from('project_invites').delete().eq('id', inviteId)
     if (error) {
+      setMsgIsError(true)
       setMsg(`Error revoking invite: ${error.message}`)
       return
     }
@@ -265,198 +273,267 @@ export default function ProjectMembers({ project }: { project: Project }) {
     const url = `${window.location.origin}/invite/${token}`
     try {
       await navigator.clipboard.writeText(url)
+      setMsgIsError(false)
       setMsg('Invite link copied to clipboard.')
     } catch {
-      setMsg(`Copy failed. Here is the link: ${url}`)
+      setMsgIsError(false)
+      setMsg(`Copy failed. Link: ${url}`)
     }
   }
 
-  // since we only load pending invites from DB, this is redundant but harmless
   const pendingInvites = invites.filter((i) => !i.accepted_at)
 
+  const cellStyle: React.CSSProperties = {
+    padding: '10px 12px',
+    borderBottom: `1px solid ${colors.border}`,
+    fontSize: 14,
+    color: colors.textPrimary,
+    verticalAlign: 'middle',
+  }
+
+  const headerCellStyle: React.CSSProperties = {
+    padding: '8px 12px',
+    borderBottom: `1px solid ${colors.borderStrong}`,
+    fontSize: 11,
+    fontWeight: 600,
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    textAlign: 'left' as const,
+  }
+
   return (
-    <section>
-      <h3 style={{ marginTop: 0 }}>Members — {project.name}</h3>
+    <section style={{ fontFamily: font.sans }}>
+      <h3 style={{ marginTop: 0, marginBottom: 6, fontSize: 16, fontWeight: 600, color: colors.textPrimary }}>
+        Team / Access
+      </h3>
 
-      {/* Everyone can see their own role (no hierarchy beyond self) */}
-      <p style={{ marginTop: 6, opacity: 0.85 }}>
-        Your role: <b>{myRole ?? 'unknown'}</b>
-      </p>
+      {/* Current user's role */}
+      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 14, color: colors.textSecondary }}>Your role:</span>
+        {myRole && <span style={roleBadgeStyle(myRole)}>{myRole}</span>}
+      </div>
 
-      {/* Management UI: only owners/editors */}
+      {/* Add member form — owners/editors only */}
       {canManage && (
-        <>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{
+          background: colors.surface,
+          border: `1px solid ${colors.border}`,
+          borderRadius: radius.lg,
+          padding: '16px',
+          marginBottom: 24,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: colors.textSecondary, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Add a Member
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="member@email.com"
-              style={{ padding: 8, width: 260 }}
+              onKeyDown={(e) => e.key === 'Enter' && addMember()}
+              className="input-field"
+              style={{ fontFamily: font.sans, width: 240 }}
             />
 
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as Exclude<Role, 'owner'>)}
-              style={{ padding: 8 }}
+              className="input-select"
+              style={{ fontFamily: font.sans }}
             >
-              <option value="editor">editor</option>
-              <option value="member">member</option>
-              <option value="readonly">readonly</option>
+              <option value="editor">Editor</option>
+              <option value="member">Member</option>
+              <option value="readonly">Read-only</option>
             </select>
 
-            <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button onClick={addMember} disabled={loading} className="btn-primary">
+              {loading ? 'Adding…' : 'Add'}
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={isManaged}
                 onChange={(e) => setIsManaged(e.target.checked)}
+                style={{ accentColor: colors.violet, width: 14, height: 14 }}
               />
-              Managed member
+              <span style={{ fontSize: 13, color: colors.textSecondary }}>Managed member</span>
             </label>
 
-            <label
-              style={{
-                display: 'flex',
-                gap: 6,
-                alignItems: 'center',
-                opacity: isManaged ? 0.5 : 1,
-              }}
-            >
+            <label style={{
+              display: 'flex', gap: 8, alignItems: 'center', cursor: isManaged ? 'default' : 'pointer',
+              opacity: isManaged ? 0.45 : 1,
+            }}>
               <input
                 type="checkbox"
                 checked={sendInviteEmail}
                 onChange={(e) => setSendInviteEmail(e.target.checked)}
                 disabled={isManaged}
+                style={{ accentColor: colors.violet, width: 14, height: 14 }}
               />
-              Send invite email
+              <span style={{ fontSize: 13, color: colors.textSecondary }}>Send invite email</span>
             </label>
-
-            <button onClick={addMember} disabled={loading}>
-              {loading ? 'Adding...' : 'Add'}
-            </button>
           </div>
 
-          <p style={{ marginTop: 10, opacity: 0.8, maxWidth: 900 }}>
-            Use <b>Managed member</b> for people you’ll manage (they may never log in). For everyone
-            else, use <b>Send invite email</b> so they can join cleanly and self-manage later.
+          <p style={{ marginTop: 10, marginBottom: 0, fontSize: 12, color: colors.textMuted, maxWidth: 560, lineHeight: 1.5 }}>
+            Use <span style={{ color: colors.textSecondary, fontWeight: 500 }}>Managed member</span> for people you'll manage who may never log in. For everyone else, use <span style={{ color: colors.textSecondary, fontWeight: 500 }}>Send invite email</span> so they can join and self-manage.
           </p>
-        </>
+        </div>
       )}
 
-      {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
+      {msg && (
+        <p style={{ marginBottom: 16, fontSize: 13, color: msgIsError ? colors.red : colors.green }}>
+          {msg}
+        </p>
+      )}
 
-      {/* Roster: everyone sees the list of users.
-          Only owners/editors see role+managed+controls. */}
-      <table style={{ marginTop: 16, width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr>
-            <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>Email</th>
-
-            {canManage && (
-              <>
-                <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
-                  Role
-                </th>
-                <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
-                  Managed
-                </th>
-                <th style={{ borderBottom: '1px solid #ddd', padding: 8 }} />
-              </>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {members.map((m) => (
-            <tr key={m.id}>
-              <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>{m.member_email}</td>
-
+      {/* Members table */}
+      <div style={{
+        background: colors.surface,
+        border: `1px solid ${colors.border}`,
+        borderRadius: radius.lg,
+        overflow: 'hidden',
+        marginBottom: 28,
+      }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: colors.card }}>
+              <th style={headerCellStyle}>Email</th>
               {canManage && (
                 <>
-                  <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-                    {m.role === 'owner' ? (
-                      <span>owner</span>
-                    ) : (
-                      <select
-                        value={m.role}
-                        onChange={(e) => updateMember(m.id, { role: e.target.value as Role })}
-                        style={{ padding: 6 }}
-                      >
-                        <option value="editor">editor</option>
-                        <option value="member">member</option>
-                        <option value="readonly">readonly</option>
-                      </select>
-                    )}
-                  </td>
-
-                  <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-                    <input
-                      type="checkbox"
-                      checked={m.is_managed}
-                      onChange={(e) => updateMember(m.id, { is_managed: e.target.checked })}
-                      disabled={m.role === 'owner'}
-                    />
-                  </td>
-
-                  <td
-                    style={{
-                      padding: 8,
-                      borderBottom: '1px solid #f0f0f0',
-                      textAlign: 'right',
-                    }}
-                  >
-                    {m.role !== 'owner' && <button onClick={() => removeMember(m.id)}>Remove</button>}
-                  </td>
+                  <th style={headerCellStyle}>Role</th>
+                  <th style={headerCellStyle}>Managed</th>
+                  <th style={{ ...headerCellStyle, width: 80 }} />
                 </>
               )}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {members.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={canManage ? 4 : 1}
+                  style={{ ...cellStyle, color: colors.textMuted, textAlign: 'center', padding: '20px 12px' }}
+                >
+                  No members yet.
+                </td>
+              </tr>
+            ) : members.map((m) => (
+              <tr key={m.id}>
+                <td style={cellStyle}>
+                  <span style={{ color: colors.textPrimary }}>{m.member_email}</span>
+                </td>
 
-      {members.length === 0 && <p style={{ marginTop: 12, opacity: 0.8 }}>No members yet.</p>}
+                {canManage && (
+                  <>
+                    <td style={cellStyle}>
+                      {m.role === 'owner' ? (
+                        <span style={roleBadgeStyle('owner')}>owner</span>
+                      ) : (
+                        <select
+                          value={m.role}
+                          onChange={(e) => updateMember(m.id, { role: e.target.value as Role })}
+                          className="input-select"
+                          style={{ fontFamily: font.sans, fontSize: 13, padding: '4px 8px' }}
+                        >
+                          <option value="editor">Editor</option>
+                          <option value="member">Member</option>
+                          <option value="readonly">Read-only</option>
+                        </select>
+                      )}
+                    </td>
 
-      {/* Pending invites: only owners/editors */}
+                    <td style={cellStyle}>
+                      <input
+                        type="checkbox"
+                        checked={m.is_managed}
+                        onChange={(e) => updateMember(m.id, { is_managed: e.target.checked })}
+                        disabled={m.role === 'owner'}
+                        style={{ accentColor: colors.violet, width: 14, height: 14 }}
+                      />
+                    </td>
+
+                    <td style={{ ...cellStyle, textAlign: 'right' }}>
+                      {m.role !== 'owner' && (
+                        <button
+                          onClick={() => removeMember(m.id)}
+                          className="btn-link-danger"
+                          style={{ fontSize: 13 }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pending invites — owners/editors only */}
       {canManage && (
-        <div style={{ marginTop: 28 }}>
-          <h4 style={{ marginBottom: 8 }}>Pending Invites</h4>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary, marginBottom: 12 }}>
+            Pending Invites
+          </div>
 
           {pendingInvites.length === 0 ? (
-            <p style={{ marginTop: 0, opacity: 0.8 }}>No pending invites.</p>
+            <p style={{ color: colors.textMuted, fontSize: 14, marginTop: 0 }}>
+              No pending invites.
+            </p>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
-                    Invited Email
-                  </th>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
-                    Role
-                  </th>
-                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: 8 }}>
-                    Expires
-                  </th>
-                  <th style={{ borderBottom: '1px solid #ddd', padding: 8 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {pendingInvites.map((inv) => (
-                  <tr key={inv.id}>
-                    <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-                      {inv.invited_email}
-                    </td>
-                    <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>{inv.role}</td>
-                    <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0' }}>
-                      {new Date(inv.expires_at).toLocaleString()}
-                    </td>
-                    <td style={{ padding: 8, borderBottom: '1px solid #f0f0f0', textAlign: 'right' }}>
-                      <button onClick={() => copyInviteLink(inv.token)} style={{ marginRight: 8 }}>
-                        Copy link
-                      </button>
-                      <button onClick={() => revokeInvite(inv.id)}>Revoke</button>
-                    </td>
+            <div style={{
+              background: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: radius.lg,
+              overflow: 'hidden',
+            }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: colors.card }}>
+                    <th style={headerCellStyle}>Invited Email</th>
+                    <th style={headerCellStyle}>Role</th>
+                    <th style={headerCellStyle}>Expires</th>
+                    <th style={{ ...headerCellStyle, width: 140 }} />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {pendingInvites.map((inv) => (
+                    <tr key={inv.id}>
+                      <td style={cellStyle}>{inv.invited_email}</td>
+                      <td style={cellStyle}>
+                        <span style={roleBadgeStyle(inv.role)}>{inv.role}</span>
+                      </td>
+                      <td style={{ ...cellStyle, color: colors.textSecondary, fontSize: 13 }}>
+                        {new Date(inv.expires_at).toLocaleDateString()}
+                      </td>
+                      <td style={{ ...cellStyle, textAlign: 'right' }}>
+                        <button
+                          onClick={() => copyInviteLink(inv.token)}
+                          className="btn-secondary"
+                          style={{ fontSize: 12, padding: '4px 10px', marginRight: 6 }}
+                        >
+                          Copy link
+                        </button>
+                        <button
+                          onClick={() => revokeInvite(inv.id)}
+                          className="btn-link-danger"
+                          style={{ fontSize: 12 }}
+                        >
+                          Revoke
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

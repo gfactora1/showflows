@@ -124,12 +124,21 @@ export default function AcceptInviteClient({ token }: { token: string }) {
   }
 
   const logo: React.CSSProperties = {
-    fontSize: 22,
-    fontWeight: 700,
-    letterSpacing: -0.5,
     marginBottom: 32,
     display: 'block',
+    textAlign: 'center' as const,
   }
+
+  // Reusable logo element — image with text fallback
+  const LogoEl = (
+    <div style={logo}>
+      <img
+        src="/logo.png"
+        alt="ShowFlows"
+        style={{ height: 30, width: 'auto', display: 'inline-block' }}
+      />
+    </div>
+  )
 
   const card: React.CSSProperties = {
     border: '1px solid #e5e5e5',
@@ -168,7 +177,7 @@ export default function AcceptInviteClient({ token }: { token: string }) {
   if (state.kind === 'loading') {
     return (
       <div style={container}>
-        <span style={logo}>ShowFlows</span>
+        {LogoEl}
         <div style={card}>
           <p style={{ color: '#888' }}>Loading your invite…</p>
         </div>
@@ -179,7 +188,7 @@ export default function AcceptInviteClient({ token }: { token: string }) {
   if (state.kind === 'invalid') {
     return (
       <div style={container}>
-        <span style={logo}>ShowFlows</span>
+        {LogoEl}
         <div style={card}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>🔗</div>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 12px' }}>Invalid invite link</h2>
@@ -193,7 +202,7 @@ export default function AcceptInviteClient({ token }: { token: string }) {
   if (state.kind === 'expired') {
     return (
       <div style={container}>
-        <span style={logo}>ShowFlows</span>
+        {LogoEl}
         <div style={card}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>⏰</div>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 12px' }}>Invite has expired</h2>
@@ -209,7 +218,7 @@ export default function AcceptInviteClient({ token }: { token: string }) {
   if (state.kind === 'already_accepted') {
     return (
       <div style={container}>
-        <span style={logo}>ShowFlows</span>
+        {LogoEl}
         <div style={card}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>✅</div>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 12px' }}>Already accepted</h2>
@@ -227,7 +236,7 @@ export default function AcceptInviteClient({ token }: { token: string }) {
     const loginUrl = `/login?redirect=/invite/${token}`
     return (
       <div style={container}>
-        <span style={logo}>ShowFlows</span>
+        {LogoEl}
         <div style={card}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>👋</div>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 12px' }}>You've been invited</h2>
@@ -248,7 +257,7 @@ export default function AcceptInviteClient({ token }: { token: string }) {
     const { invite, userEmail } = state
     return (
       <div style={container}>
-        <span style={logo}>ShowFlows</span>
+        {LogoEl}
         <div style={card}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>⚠️</div>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 12px' }}>Wrong account</h2>
@@ -269,7 +278,7 @@ export default function AcceptInviteClient({ token }: { token: string }) {
     const { invite } = state
     return (
       <div style={container}>
-        <span style={logo}>ShowFlows</span>
+        {LogoEl}
         <div style={card}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>🎵</div>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 12px' }}>You've been invited</h2>
@@ -293,7 +302,7 @@ export default function AcceptInviteClient({ token }: { token: string }) {
   if (state.kind === 'accepting') {
     return (
       <div style={container}>
-        <span style={logo}>ShowFlows</span>
+        {LogoEl}
         <div style={card}>
           <p style={{ color: '#888' }}>Accepting invite…</p>
         </div>
@@ -304,7 +313,7 @@ export default function AcceptInviteClient({ token }: { token: string }) {
   if (state.kind === 'accepted') {
     return (
       <div style={container}>
-        <span style={logo}>ShowFlows</span>
+        {LogoEl}
         <div style={card}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>🎉</div>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 12px' }}>You're in!</h2>
@@ -320,7 +329,7 @@ export default function AcceptInviteClient({ token }: { token: string }) {
   if (state.kind === 'error') {
     return (
       <div style={container}>
-        <span style={logo}>ShowFlows</span>
+        {LogoEl}
         <div style={card}>
           <div style={{ fontSize: 40, marginBottom: 16 }}>❌</div>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 12px' }}>Something went wrong</h2>
