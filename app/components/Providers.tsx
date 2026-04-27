@@ -43,6 +43,7 @@ export default function Providers({ projectId, myRole }: Props) {
       .from('providers')
       .select('id,project_id,name,provider_type,is_active,created_at')
       .eq('project_id', projectId)
+      .is('deleted_at', null)
       .order('provider_type', { ascending: true })
 
     if (error) {
@@ -137,15 +138,20 @@ export default function Providers({ projectId, myRole }: Props) {
   }
 
   const deleteProvider = async (id: string) => {
-    if (!confirm('Delete this provider? This cannot be undone.')) return
+    if (!confirm('Delete this provider? It can be recovered within 14 days.')) return
     setMsg('')
-
-    const { error } = await supabase.from('providers').delete().eq('id', id)
+    const { data: { user } } = await supabase.auth.getUser()
+    const now = new Date()
+    const purgeAfter = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+    const { error } = await supabase.from('providers').update({
+      deleted_at: now.toISOString(),
+      deleted_by: user?.id ?? null,
+      purge_after: purgeAfter.toISOString(),
+    }).eq('id', id)
     if (error) {
       setMsg(`Error deleting provider: ${error.message}`)
       return
     }
-
     await loadProviders()
   }
 

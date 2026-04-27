@@ -116,7 +116,7 @@ const btnGhost: React.CSSProperties = {
   background: 'transparent',
   border: `1px solid ${colors.borderStrong}`,
   borderRadius: radius.sm,
-  color: colors.textPrimary,
+  color: colors.textSecondary,
   fontSize: 12,
   cursor: 'pointer',
   fontFamily: font.sans,
@@ -148,58 +148,17 @@ export default function Shows({ projectId, myRole }: Props) {
   const [loading, setLoading]           = useState(false)
   const [msg, setMsg]                   = useState('')
 
-  // Inline venue creation — shown when user picks "Create new venue" in the select
-  const [showNewVenueForm, setShowNewVenueForm] = useState(false)
-  const [newVenueForm, setNewVenueForm] = useState({ name: '', address: '', city: '', state: '', zip: '' })
-  const [savingVenue, setSavingVenue]   = useState(false)
-  const [newVenueMsg, setNewVenueMsg]   = useState('')
-
   const canEdit  = myRole === 'owner' || myRole === 'editor'
   const canDelete = myRole === 'owner'
-
-  const createVenueInline = async (forForm: 'add' | 'edit') => {
-    setNewVenueMsg('')
-    if (!newVenueForm.name.trim()) return setNewVenueMsg('Venue name is required.')
-    if (!newVenueForm.city.trim()) return setNewVenueMsg('City is required.')
-    setSavingVenue(true)
-    try {
-      const { data: userData } = await supabase.auth.getUser()
-      const { data, error } = await supabase
-        .from('venues')
-        .insert({
-          project_id: projectId,
-          name: newVenueForm.name.trim(),
-          address: newVenueForm.address.trim() || null,
-          city: newVenueForm.city.trim() || null,
-          state: newVenueForm.state.trim() || null,
-          zip: newVenueForm.zip.trim() || null,
-          is_active: true,
-          created_by_user_id: userData?.user?.id ?? null,
-        })
-        .select('id')
-        .single()
-      if (error) throw error
-      // Reload venues then auto-select the new one
-      await loadLookups()
-      const newId = data.id
-      if (forForm === 'add') setForm((f) => ({ ...f, venue_id: newId }))
-      else setEditForm((f) => ({ ...f, venue_id: newId }))
-      setShowNewVenueForm(false)
-      setNewVenueForm({ name: '', address: '', city: '', state: '', zip: '' })
-      setNewVenueMsg('')
-    } catch (e: any) {
-      setNewVenueMsg(`Error creating venue: ${e?.message ?? String(e)}`)
-    } finally {
-      setSavingVenue(false)
-    }
-  }
 
   const loadLookups = async () => {
     const [venueRes, providerRes] = await Promise.all([
       supabase.from('venues').select('id,name,address,city,state')
-        .eq('project_id', projectId).eq('is_active', true).order('name', { ascending: true }),
+        .eq('project_id', projectId)
+        .is('deleted_at', null).eq('is_active', true).order('name', { ascending: true }),
       supabase.from('providers').select('id,name,provider_type')
-        .eq('project_id', projectId).eq('is_active', true)
+        .eq('project_id', projectId)
+        .is('deleted_at', null).eq('is_active', true)
         .eq('provider_type', 'sound').order('name', { ascending: true }),
     ])
     setVenues((venueRes.data ?? []) as Venue[])
@@ -211,6 +170,7 @@ export default function Shows({ projectId, myRole }: Props) {
       .from('shows')
       .select('id,project_id,title,venue_id,provider_id,starts_at,ends_at,load_in_at,notes,created_at')
       .eq('project_id', projectId)
+      .is('deleted_at', null)
       .order('starts_at', { ascending: true })
     if (error) { setMsg(`Error loading shows: ${error.message}`); return }
 
@@ -307,9 +267,16 @@ export default function Shows({ projectId, myRole }: Props) {
   }
 
   const deleteShow = async (id: string) => {
-    if (!confirm('Delete this show? This cannot be undone.')) return
+    if (!confirm('Delete this show? It can be recovered within 14 days.')) return
     setMsg('')
-    const { error } = await supabase.from('shows').delete().eq('id', id)
+    const { data: { user } } = await supabase.auth.getUser()
+    const now = new Date()
+    const purgeAfter = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+    const { error } = await supabase.from('shows').update({
+      deleted_at: now.toISOString(),
+      deleted_by: user?.id ?? null,
+      purge_after: purgeAfter.toISOString(),
+    }).eq('id', id)
     if (error) { setMsg(`Error deleting show: ${error.message}`); return }
     if (selectedShow?.id === id) setSelectedShow(null)
     await loadLookups()
@@ -346,94 +313,20 @@ export default function Shows({ projectId, myRole }: Props) {
         onChange={(e) => set({ ...values, title: e.target.value })}
         style={inputStyle}
       />
-      {/* Venue select — with inline "Create new venue" option */}
       <select
         value={values.venue_id}
-        onChange={(e) => {
-          if (e.target.value === '__new__') {
-            setShowNewVenueForm(true)
-            set({ ...values, venue_id: '' })
-          } else {
-            setShowNewVenueForm(false)
-            set({ ...values, venue_id: e.target.value })
-          }
-        }}
+        onChange={(e) => set({ ...values, venue_id: e.target.value })}
         style={selectStyle}
       >
         <option value="">— Select a venue —</option>
         {venues.map((v) => (
           <option key={v.id} value={v.id}>{venueLabel(v)}</option>
         ))}
-        <option value="__new__">+ Create new venue…</option>
       </select>
-
-      {/* Inline venue creation form */}
-      {showNewVenueForm && (
-        <div style={{
-          background: colors.surface,
-          border: `1px solid ${colors.borderStrong}`,
-          borderLeft: `3px solid ${colors.violet}`,
-          borderRadius: radius.md,
-          padding: '12px 14px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 7,
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: colors.textMuted, marginBottom: 2 }}>
-            New Venue
-          </div>
-          <input
-            placeholder="Venue name (required)"
-            value={newVenueForm.name}
-            onChange={(e) => setNewVenueForm({ ...newVenueForm, name: e.target.value })}
-            style={inputStyle}
-            autoFocus
-          />
-          <input
-            placeholder="Street address (optional)"
-            value={newVenueForm.address}
-            onChange={(e) => setNewVenueForm({ ...newVenueForm, address: e.target.value })}
-            style={inputStyle}
-          />
-          <div style={{ display: 'flex', gap: 7 }}>
-            <input
-              placeholder="City (required)"
-              value={newVenueForm.city}
-              onChange={(e) => setNewVenueForm({ ...newVenueForm, city: e.target.value })}
-              style={{ ...inputStyle, flex: 2 }}
-            />
-            <input
-              placeholder="State"
-              value={newVenueForm.state}
-              onChange={(e) => setNewVenueForm({ ...newVenueForm, state: e.target.value })}
-              style={{ ...inputStyle, flex: 1 }}
-            />
-            <input
-              placeholder="Zip"
-              value={newVenueForm.zip}
-              onChange={(e) => setNewVenueForm({ ...newVenueForm, zip: e.target.value })}
-              style={{ ...inputStyle, flex: 1 }}
-            />
-          </div>
-          {newVenueMsg && (
-            <p style={{ fontSize: 12, color: colors.red, margin: 0 }}>{newVenueMsg}</p>
-          )}
-          <div style={{ display: 'flex', gap: 7, marginTop: 2 }}>
-            <button
-              onClick={() => createVenueInline(values === form ? 'add' : 'edit')}
-              disabled={savingVenue}
-              style={{ ...btnPrimary, fontSize: 12, padding: '5px 14px', opacity: savingVenue ? 0.6 : 1 }}
-            >
-              {savingVenue ? 'Saving…' : 'Save venue'}
-            </button>
-            <button
-              onClick={() => { setShowNewVenueForm(false); setNewVenueForm({ name: '', address: '', city: '', state: '', zip: '' }); setNewVenueMsg('') }}
-              style={{ ...btnGhost, fontSize: 12 }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+      {venues.length === 0 && (
+        <p style={{ margin: 0, fontSize: 12, color: colors.textMuted }}>
+          No venues yet — add one in Settings → Planning Defaults first.
+        </p>
       )}
 
       <select
@@ -510,7 +403,7 @@ export default function Shows({ projectId, myRole }: Props) {
           borderRadius: radius.lg,
           padding: '14px 16px',
           marginBottom: 8,
-          opacity: isPast ? 0.8 : 1,
+          opacity: isPast ? 0.6 : 1,
           transition: `opacity ${transition.normal}`,
         }}
       >

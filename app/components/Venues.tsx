@@ -135,6 +135,7 @@ export default function Venues({ projectId, myRole }: Props) {
       .from('venues')
       .select('id,project_id,name,address,city,state,zip,notes,is_active,created_by_user_id')
       .eq('project_id', projectId)
+      .is('deleted_at', null)
       .order('name', { ascending: true })
     if (error) { setMsg(`Error loading venues: ${error.message}`); return }
     const list = (data ?? []) as Venue[]
@@ -261,9 +262,16 @@ export default function Venues({ projectId, myRole }: Props) {
   }
 
   const deleteVenue = async (id: string) => {
-    if (!confirm('Delete this venue? This cannot be undone.')) return
+    if (!confirm('Delete this venue? It can be recovered within 14 days.')) return
     setMsg('')
-    const { error } = await supabase.from('venues').delete().eq('id', id)
+    const { data: { user } } = await supabase.auth.getUser()
+    const now = new Date()
+    const purgeAfter = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+    const { error } = await supabase.from('venues').update({
+      deleted_at: now.toISOString(),
+      deleted_by: user?.id ?? null,
+      purge_after: purgeAfter.toISOString(),
+    }).eq('id', id)
     if (error) setMsg(`Error deleting venue: ${error.message}`)
     else { await loadVenues(); if (isOwner) await loadLibrary() }
   }

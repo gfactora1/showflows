@@ -335,6 +335,10 @@ function ProjectsInner(
             viewMode={viewMode}
             activeSection={activeSection as any}
             onNavigate={onNavigate as any}
+            onProjectDeleted={(deletedId) => {
+              setProjects(projects.filter((p) => p.id !== deletedId))
+              onSelectProject(null)
+            }}
           />
         ) : (
           <div style={{ paddingTop: 48, textAlign: 'center' }}>

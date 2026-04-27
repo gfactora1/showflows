@@ -123,6 +123,7 @@ export default function SongLibrary({ projectId, myRole }: Props) {
       .from('project_songs')
       .select('id,project_id,title,artist,key,notes,uses_backing_track,is_active,created_at')
       .eq('project_id', projectId)
+      .is('deleted_at', null)
       .order('title', { ascending: true })
     setLoading(false)
     if (error) { showMsg(`Error loading songs: ${error.message}`, true); return }
@@ -183,9 +184,16 @@ export default function SongLibrary({ projectId, myRole }: Props) {
   }
 
   const deleteSong = async (id: string) => {
-    if (!confirm('Delete this song from the library? This cannot be undone.')) return
+    if (!confirm('Delete this song from the library? It can be recovered within 14 days.')) return
     setMsg('')
-    const { error } = await supabase.from('project_songs').delete().eq('id', id)
+    const { data: { user } } = await supabase.auth.getUser()
+    const now = new Date()
+    const purgeAfter = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+    const { error } = await supabase.from('project_songs').update({
+      deleted_at: now.toISOString(),
+      deleted_by: user?.id ?? null,
+      purge_after: purgeAfter.toISOString(),
+    }).eq('id', id)
     if (error) { showMsg(`Error deleting: ${error.message}`, true); return }
     await loadSongs()
   }
@@ -226,7 +234,7 @@ export default function SongLibrary({ projectId, myRole }: Props) {
       const activeIdx = rawHeaders.indexOf('is_active')
       const hasActiveColumn = activeIdx !== -1
 
-      const { data: existingSongs } = await supabase.from('project_songs').select('id, title, artist, is_active').eq('project_id', projectId)
+      const { data: existingSongs } = await supabase.from('project_songs').select('id, title, artist, is_active').eq('project_id', projectId).is('deleted_at', null)
       const existingMap = new Map<string, { id: string; is_active: boolean }>()
       ;(existingSongs ?? []).forEach((s: any) => {
         existingMap.set(`${s.title.toLowerCase().trim()}|${(s.artist ?? '').toLowerCase().trim()}`, { id: s.id, is_active: s.is_active })

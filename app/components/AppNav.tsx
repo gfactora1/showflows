@@ -25,8 +25,6 @@ export interface AppNavProps {
   onNavigate?: (section: AdminSection | MemberSection) => void
   userInitials?: string
   conflictCount?: number
-  onCreateProject?: () => void
-  onLogout?: () => void
 }
 
 export type AdminSection =
@@ -304,8 +302,6 @@ export default function AppNav({
   onNavigate,
   userInitials = '??',
   conflictCount = 0,
-  onCreateProject,
-  onLogout,
 }: AppNavProps) {
   const navRef = useRef<HTMLDivElement>(null)
   const isMember = viewMode === 'member'
@@ -382,6 +378,7 @@ export default function AppNav({
           alignItems: 'center',
           padding: '0 12px',
           gap: 8,
+          overflow: 'hidden', // safety net only
           position: 'relative',
           userSelect: 'none',
         }}
@@ -389,26 +386,17 @@ export default function AppNav({
 
         {/* ── Logo ── */}
         <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-          <div
+          <img
+            src="/logo.png"
+            alt="ShowFlows"
             style={{
-              width: 28, height: 28, borderRadius: radius.sm,
-              background: 'linear-gradient(135deg, #295FFF, #7C3AED)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11, fontWeight: 700, color: 'white', letterSpacing: '-0.5px',
+              height: 28,
+              width: 'auto',
+              maxWidth: collapse.narrowLogo ? 32 : 140,
+              objectFit: 'contain',
+              objectPosition: 'left center',
             }}
-          >
-            SF
-          </div>
-          {!collapse.narrowLogo && (
-            <span
-              style={{
-                fontSize: 15, fontWeight: 600, color: colors.textPrimary,
-                letterSpacing: '-0.3px', marginLeft: 8, whiteSpace: 'nowrap',
-              }}
-            >
-              ShowFlows
-            </span>
-          )}
+          />
         </div>
 
         {/* ── Project switcher ── */}
@@ -572,12 +560,8 @@ export default function AppNav({
             {/* Member More contents */}
             {isMember && (
               <>
-                <DropItem
-                  label="Create Project"
-                  onClick={() => { closeAll(); onCreateProject?.() }}
-                />
-                <DropDivider />
-                <DropItem label="Account Settings" onClick={closeAll} />
+                <DropItem label="Account" onClick={closeAll} />
+                <DropItem label="Help" onClick={closeAll} />
                 {canToggle && (
                   <>
                     <DropDivider />
@@ -587,12 +571,6 @@ export default function AppNav({
                     />
                   </>
                 )}
-                <DropDivider />
-                <DropItem
-                  label="Sign out"
-                  muted
-                  onClick={() => { closeAll(); onLogout?.() }}
-                />
               </>
             )}
           </NavDropdown>
@@ -732,18 +710,10 @@ export default function AppNav({
           )}
 
           <NavDropdown open={openDrop === 'avatar'} alignRight>
-            <DropItem
-              label="Create Project"
-              onClick={() => { closeAll(); onCreateProject?.() }}
-            />
+            <DropItem label="Account" onClick={closeAll} />
+            <DropItem label="Notifications" onClick={closeAll} />
             <DropDivider />
-            <DropItem label="Account Settings" onClick={closeAll} />
-            <DropDivider />
-            <DropItem
-              label="Sign out"
-              muted
-              onClick={() => { closeAll(); onLogout?.() }}
-            />
+            <DropItem label="Sign out" muted onClick={closeAll} />
           </NavDropdown>
         </div>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
-import { colors, radius, font } from './tokens'
+import { colors, radius, font, transition } from './tokens'
 
 type Role = 'owner' | 'editor' | 'member' | 'readonly'
 
@@ -36,6 +36,7 @@ export default function Roles({ projectId, myRole }: Props) {
       .from('roles')
       .select('id,project_id,name,is_active,sort_order,created_at')
       .eq('project_id', projectId)
+      .is('deleted_at', null)
       .order('sort_order', { ascending: true })
 
     if (error) {
@@ -128,15 +129,20 @@ export default function Roles({ projectId, myRole }: Props) {
   }
 
   const deleteRole = async (id: string) => {
-    if (!confirm('Delete this role? This cannot be undone.')) return
+    if (!confirm('Delete this role? It can be recovered within 14 days.')) return
     setMsg('')
-
-    const { error } = await supabase.from('roles').delete().eq('id', id)
+    const { data: { user } } = await supabase.auth.getUser()
+    const now = new Date()
+    const purgeAfter = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+    const { error } = await supabase.from('roles').update({
+      deleted_at: now.toISOString(),
+      deleted_by: user?.id ?? null,
+      purge_after: purgeAfter.toISOString(),
+    }).eq('id', id)
     if (error) {
       setMsg(`Error deleting role: ${error.message}`)
       return
     }
-
     await loadRoles()
   }
 
