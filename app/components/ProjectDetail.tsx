@@ -206,7 +206,7 @@ function DeleteProjectModal({
         }}>
           🛟{' '}
           {purgeAfter
-            ? <>You can restore this project for <strong style={{ color: colors.textPrimary }}>{recoveryDays} days</strong> (until <strong style={{ color: colors.textPrimary }}>{formatDate(purgeAfter)}</strong>). After that, deletion becomes permanent.</>
+            ? <>This project can be restored for <strong style={{ color: colors.textPrimary }}>{recoveryDays} days</strong> (until <strong style={{ color: colors.textPrimary }}>{formatDate(purgeAfter)}</strong>). After that, deletion becomes permanent.</>
             : <>Your data remains recoverable during your recovery window.</>
           }
         </div>
@@ -216,23 +216,37 @@ function DeleteProjectModal({
           <label style={{ display: 'block', fontSize: 13, color: colors.textSecondary, marginBottom: 6 }}>
             Type <strong style={{ color: colors.textPrimary }}>{project.name}</strong> to confirm
           </label>
-          <input
-            ref={inputRef}
-            value={typedName}
-            onChange={(e) => setTypedName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && canDelete && handleDelete()}
-            placeholder={project.name}
-            className="input-field"
-            style={{
-              fontFamily: font.sans,
-              width: '100%',
-              boxSizing: 'border-box',
-              borderColor: typedName.length > 0
-                ? nameMatches ? colors.green : colors.red
-                : undefined,
-            }}
-            disabled={step === 'deleting'}
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              ref={inputRef}
+              value={typedName}
+              onChange={(e) => setTypedName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && canDelete && handleDelete()}
+              placeholder={project.name}
+              className="input-field"
+              style={{
+                fontFamily: font.sans,
+                width: '100%',
+                boxSizing: 'border-box',
+                paddingRight: nameMatches ? '32px' : undefined,
+                borderColor: typedName.length > 0
+                  ? nameMatches ? colors.green : colors.red
+                  : undefined,
+              }}
+              disabled={step === 'deleting'}
+            />
+            {nameMatches && (
+              <span style={{
+                position: 'absolute',
+                right: 10,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: colors.green,
+                fontSize: 16,
+                pointerEvents: 'none',
+              }}>✓</span>
+            )}
+          </div>
         </div>
 
         {/* Checkbox */}
@@ -253,8 +267,8 @@ function DeleteProjectModal({
             disabled={step === 'deleting'}
             style={{ marginTop: 2, flexShrink: 0, accentColor: colors.violet }}
           />
-          I understand this project will be permanently deleted after the recovery window
-          {purgeAfter && <> — {recoveryDays} days, on {formatDate(purgeAfter)}</>}.
+          I understand this project will be permanently deleted after the{' '}
+          {recoveryDays}-day recovery window{purgeAfter && <> ({formatDate(purgeAfter)})</>}.
         </label>
 
         {/* Error */}
