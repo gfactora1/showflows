@@ -125,6 +125,8 @@ export default function Venues({ projectId, myRole }: Props) {
   const [showLibrary, setShowLibrary] = useState(false)
   const [loading, setLoading]         = useState(false)
   const [msg, setMsg]                 = useState('')
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
+  const [pendingDeleteContact, setPendingDeleteContact] = useState<{ id: string; name: string } | null>(null)
 
   const isOwner  = myRole === 'owner'
   const canEdit  = myRole === 'owner' || myRole === 'editor'
@@ -262,7 +264,6 @@ export default function Venues({ projectId, myRole }: Props) {
   }
 
   const deleteVenue = async (id: string) => {
-    if (!confirm('Delete this venue? It can be recovered within 14 days.')) return
     setMsg('')
     const { data: { user } } = await supabase.auth.getUser()
     const now = new Date()
@@ -297,7 +298,6 @@ export default function Venues({ projectId, myRole }: Props) {
   }
 
   const deleteContact = async (contactId: string) => {
-    if (!confirm('Remove this contact?')) return
     const { error } = await supabase.from('venue_contacts').delete().eq('id', contactId)
     if (error) setMsg(`Error removing contact: ${error.message}`)
     else await loadContacts(venues.map((v) => v.id))
@@ -380,7 +380,7 @@ export default function Venues({ projectId, myRole }: Props) {
                   {c.email && <div style={{ color: colors.textSecondary }}>{c.email}</div>}
                   {c.notes && <div style={{ color: colors.textMuted, fontStyle: 'italic' }}>{c.notes}</div>}
                 </div>
-                <button onClick={() => deleteContact(c.id)} style={btnDanger}>Remove</button>
+                <button onClick={() => setPendingDeleteContact({ id: c.id, name: c.name })} style={btnDanger}>Remove</button>
               </div>
             ))}
           </div>
@@ -491,7 +491,7 @@ export default function Venues({ projectId, myRole }: Props) {
                     {venue.is_active ? 'Deactivate' : 'Activate'}
                   </button>
                   {canDelete && (
-                    <button onClick={() => deleteVenue(venue.id)} style={btnDanger}>Delete</button>
+                    <button onClick={() => setPendingDelete({ id: venue.id, name: venue.name })} style={btnDanger}>Delete</button>
                   )}
                 </div>
               )}
@@ -612,6 +612,38 @@ export default function Venues({ projectId, myRole }: Props) {
           </div>
         )}
       </div>
+      {pendingDeleteContact && (
+        <>
+          <div onClick={() => setPendingDeleteContact(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: colors.surface, border: `1px solid ${colors.borderStrong}`, borderRadius: radius.xl, padding: '24px 24px 20px', width: 'min(380px, calc(100vw - 32px))', zIndex: 1001, fontFamily: font.sans }}>
+            <h2 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: colors.textPrimary }}>Remove &ldquo;{pendingDeleteContact.name}&rdquo;?</h2>
+            <p style={{ margin: '0 0 20px', fontSize: 13, color: colors.textSecondary }}>This will remove the contact from this venue.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setPendingDeleteContact(null)} className="btn-secondary" style={{ fontFamily: font.sans }}>Cancel</button>
+              <button
+                onClick={() => { deleteContact(pendingDeleteContact.id); setPendingDeleteContact(null) }}
+                style={{ fontFamily: font.sans, padding: '7px 16px', background: colors.red, color: 'white', border: 'none', borderRadius: radius.md, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >Remove</button>
+            </div>
+          </div>
+        </>
+      )}
+      {pendingDelete && (
+        <>
+          <div onClick={() => setPendingDelete(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: colors.surface, border: `1px solid ${colors.borderStrong}`, borderRadius: radius.xl, padding: '28px 28px 24px', width: 'min(420px, calc(100vw - 32px))', zIndex: 1001, fontFamily: font.sans }}>
+            <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: colors.textPrimary }}>Delete &ldquo;{pendingDelete.name}&rdquo;?</h2>
+            <p style={{ margin: '0 0 20px', fontSize: 14, color: colors.textSecondary }}>This will remove the venue from this project.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setPendingDelete(null)} className="btn-secondary" style={{ fontFamily: font.sans }}>Cancel</button>
+              <button
+                onClick={() => { deleteVenue(pendingDelete.id); setPendingDelete(null) }}
+                style={{ fontFamily: font.sans, padding: '8px 18px', background: colors.red, color: 'white', border: 'none', borderRadius: radius.md, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+              >Delete Venue</button>
+            </div>
+          </div>
+        </>
+      )}
     </section>
   )
 }

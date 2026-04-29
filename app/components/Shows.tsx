@@ -39,6 +39,7 @@ type Provider = {
 type Props = {
   projectId: string
   myRole: Role | null
+  projectName: string
 }
 
 const blank = { title: '', venue_id: '', provider_id: '', starts_at: '', ends_at: '' }
@@ -137,7 +138,7 @@ const btnDanger: React.CSSProperties = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function Shows({ projectId, myRole }: Props) {
+export default function Shows({ projectId, myRole, projectName }: Props) {
   const [shows, setShows]               = useState<Show[]>([])
   const [venues, setVenues]             = useState<Venue[]>([])
   const [soundProviders, setSoundProviders] = useState<Provider[]>([])
@@ -154,11 +155,9 @@ export default function Shows({ projectId, myRole }: Props) {
   const loadLookups = async () => {
     const [venueRes, providerRes] = await Promise.all([
       supabase.from('venues').select('id,name,address,city,state')
-        .eq('project_id', projectId)
-        .is('deleted_at', null).eq('is_active', true).order('name', { ascending: true }),
+        .eq('project_id', projectId).eq('is_active', true).order('name', { ascending: true }),
       supabase.from('providers').select('id,name,provider_type')
-        .eq('project_id', projectId)
-        .is('deleted_at', null).eq('is_active', true)
+        .eq('project_id', projectId).eq('is_active', true)
         .eq('provider_type', 'sound').order('name', { ascending: true }),
     ])
     setVenues((venueRes.data ?? []) as Venue[])
@@ -170,7 +169,6 @@ export default function Shows({ projectId, myRole }: Props) {
       .from('shows')
       .select('id,project_id,title,venue_id,provider_id,starts_at,ends_at,load_in_at,notes,created_at')
       .eq('project_id', projectId)
-      .is('deleted_at', null)
       .order('starts_at', { ascending: true })
     if (error) { setMsg(`Error loading shows: ${error.message}`); return }
 
@@ -267,16 +265,9 @@ export default function Shows({ projectId, myRole }: Props) {
   }
 
   const deleteShow = async (id: string) => {
-    if (!confirm('Delete this show? It can be recovered within 14 days.')) return
+    if (!confirm('Delete this show? This cannot be undone.')) return
     setMsg('')
-    const { data: { user } } = await supabase.auth.getUser()
-    const now = new Date()
-    const purgeAfter = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
-    const { error } = await supabase.from('shows').update({
-      deleted_at: now.toISOString(),
-      deleted_by: user?.id ?? null,
-      purge_after: purgeAfter.toISOString(),
-    }).eq('id', id)
+    const { error } = await supabase.from('shows').delete().eq('id', id)
     if (error) { setMsg(`Error deleting show: ${error.message}`); return }
     if (selectedShow?.id === id) setSelectedShow(null)
     await loadLookups()
@@ -289,6 +280,7 @@ export default function Shows({ projectId, myRole }: Props) {
         show={selectedShow}
         projectId={projectId}
         myRole={myRole}
+        projectName={projectName}
         onBack={() => setSelectedShow(null)}
       />
     )

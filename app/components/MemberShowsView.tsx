@@ -23,6 +23,9 @@ type Show = {
   starts_at: string
   ends_at: string
   venue_name: string | null
+  venue_address: string | null
+  venue_city: string | null
+  venue_state: string | null
   role_name: string | null
   is_confirmed: boolean
   project_id: string
@@ -151,7 +154,7 @@ export default function MemberShowsView({ initialProjectId }: Props) {
         if (!personData) {
           // No roster match — show all project shows for this month
           const { data: projectShows } = await supabase
-            .from('shows').select('id, title, starts_at, ends_at, venues(name)')
+            .from('shows').select('id, title, starts_at, ends_at, venues(name, address, city, state)')
             .eq('project_id', pid)
             .gte('starts_at', firstDay + 'T00:00:00Z')
             .lte('starts_at', lastDay + 'T23:59:59Z')
@@ -160,7 +163,11 @@ export default function MemberShowsView({ initialProjectId }: Props) {
           ;(projectShows ?? []).forEach((s: any) => {
             allShows.push({
               id: s.id, title: s.title, starts_at: s.starts_at, ends_at: s.ends_at,
-              venue_name: s.venues?.name ?? null, role_name: null, is_confirmed: false,
+              venue_name: s.venues?.name ?? null,
+              venue_address: s.venues?.address ?? null,
+              venue_city: s.venues?.city ?? null,
+              venue_state: s.venues?.state ?? null,
+              role_name: null, is_confirmed: false,
               project_id: pid, project_name: projectName,
             })
           })
@@ -182,7 +189,7 @@ export default function MemberShowsView({ initialProjectId }: Props) {
         const showIds = assignments.map((a: any) => a.show_id)
 
         const { data: showData } = await supabase
-          .from('shows').select('id, title, starts_at, ends_at, venues(name)')
+          .from('shows').select('id, title, starts_at, ends_at, venues(name, address, city, state)')
           .in('id', showIds)
           .gte('starts_at', firstDay + 'T00:00:00Z')
           .lte('starts_at', lastDay + 'T23:59:59Z')
@@ -193,6 +200,9 @@ export default function MemberShowsView({ initialProjectId }: Props) {
           allShows.push({
             id: s.id, title: s.title, starts_at: s.starts_at, ends_at: s.ends_at,
             venue_name: s.venues?.name ?? null,
+            venue_address: s.venues?.address ?? null,
+            venue_city: s.venues?.city ?? null,
+            venue_state: s.venues?.state ?? null,
             role_name: a?.role_name ?? null,
             is_confirmed: a?.is_confirmed ?? false,
             project_id: pid, project_name: projectName,
@@ -306,7 +316,7 @@ export default function MemberShowsView({ initialProjectId }: Props) {
             let bg        = isPast ? calPastCell : calCell
             let border    = isPast ? calBorderPast : calBorderFuture
             let bw        = '1px'
-            let numColor  = isPast ? colors.textDim : '#9CA8C8'  // slightly muted future default
+            let numColor  = isPast ? colors.textDim : '#9CA8C8'
             let dotColor: string | null = null
             let dotOpacity = 1
             let boxShadow = 'none'
@@ -525,10 +535,23 @@ export default function MemberShowsView({ initialProjectId }: Props) {
                 </span>
               </div>
 
-              {/* Venue */}
+              {/* Venue + directions */}
               {show.venue_name && (
-                <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 3 }}>
-                  📍 {show.venue_name}
+                <div style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span>📍 {show.venue_name}</span>
+                  {(show.venue_address || show.venue_city) && (() => {
+                    const parts = [show.venue_name, show.venue_address, show.venue_city, show.venue_state].filter(Boolean).join(', ')
+                    return (
+                      <a
+                        href={`https://maps.google.com/?q=${encodeURIComponent(parts)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: 12, color: colors.blue, textDecoration: 'none', whiteSpace: 'nowrap' }}
+                      >
+                        Get directions
+                      </a>
+                    )
+                  })()}
                 </div>
               )}
 

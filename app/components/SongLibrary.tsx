@@ -111,6 +111,7 @@ export default function SongLibrary({ projectId, myRole }: Props) {
   const [importing, setImporting]       = useState(false)
   const [showImportHelp, setShowImportHelp] = useState(false)
   const [importResult, setImportResult] = useState<{ added: number; updated: number; skipped: number } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
 
   const canEdit  = myRole === 'owner' || myRole === 'editor'
   const canDelete = myRole === 'owner'
@@ -184,7 +185,6 @@ export default function SongLibrary({ projectId, myRole }: Props) {
   }
 
   const deleteSong = async (id: string) => {
-    if (!confirm('Delete this song from the library? It can be recovered within 14 days.')) return
     setMsg('')
     const { data: { user } } = await supabase.auth.getUser()
     const now = new Date()
@@ -641,7 +641,7 @@ Uptown Funk,Bruno Mars,Dm,,yes,no`}</pre>
                         {song.is_active ? 'Deactivate' : 'Activate'}
                       </button>
                       {canDelete && (
-                        <button onClick={() => deleteSong(song.id)} style={btnDanger}>Delete</button>
+                        <button onClick={() => setPendingDelete({ id: song.id, name: song.title })} style={btnDanger}>Delete</button>
                       )}
                     </div>
                   )}
@@ -651,6 +651,22 @@ Uptown Funk,Bruno Mars,Dm,,yes,no`}</pre>
           )
         })}
       </div>
+      {pendingDelete && (
+        <>
+          <div onClick={() => setPendingDelete(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: '#252638', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', padding: '28px 28px 24px', width: 'min(420px, calc(100vw - 32px))', zIndex: 1001, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+            <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: '#F5F7FB' }}>Delete &ldquo;{pendingDelete.name}&rdquo;?</h2>
+            <p style={{ margin: '0 0 20px', fontSize: 14, color: '#B8C0D6' }}>This will remove the song from the library. It will no longer appear in new setlists.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setPendingDelete(null)} className="btn-secondary" style={{ fontFamily: 'inherit' }}>Cancel</button>
+              <button
+                onClick={() => { deleteSong(pendingDelete.id); setPendingDelete(null) }}
+                style={{ fontFamily: 'inherit', padding: '8px 18px', background: '#EF4444', color: 'white', border: 'none', borderRadius: '8px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+              >Delete Song</button>
+            </div>
+          </div>
+        </>
+      )}
     </section>
   )
 }

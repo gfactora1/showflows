@@ -39,6 +39,9 @@ export default function DefaultRoster({ projectId, myRole }: Props) {
   const [selectedRoleId, setSelectedRoleId] = useState('')
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
+  const [newRoleName, setNewRoleName]     = useState('')
+  const [creatingRole, setCreatingRole]   = useState(false)
 
   const canEdit = myRole === 'owner' || myRole === 'editor'
   const canDelete = myRole === 'owner'
@@ -93,7 +96,29 @@ export default function DefaultRoster({ projectId, myRole }: Props) {
     loadAll()
   }, [projectId])
 
+  const createInlineRole = async () => {
+    const name = newRoleName.trim()
+    if (!name) return
+    setCreatingRole(true)
+    try {
+      const { data, error } = await supabase
+        .from('roles')
+        .insert({ project_id: projectId, name, is_active: true })
+        .select('id,name,is_active,sort_order,created_at')
+        .single()
+      if (error) throw error
+      await loadAll()
+      setSelectedRoleId(data.id)
+      setNewRoleName('')
+    } catch (e: any) {
+      setMsg(`Error creating role: ${e?.message ?? String(e)}`)
+    } finally {
+      setCreatingRole(false)
+    }
+  }
+
   const addToRoster = async () => {
+    if (selectedRoleId === '__new__') return setMsg('Please finish creating the new role first.')
     setMsg('')
     if (!selectedPersonId) return setMsg('Select a person.')
 
@@ -138,7 +163,6 @@ export default function DefaultRoster({ projectId, myRole }: Props) {
   }
 
   const removeFromRoster = async (entryId: string) => {
-    if (!confirm('Remove from default roster?')) return
     setMsg('')
 
     const { error } = await supabase
@@ -219,19 +243,49 @@ export default function DefaultRoster({ projectId, myRole }: Props) {
                 ))}
               </select>
 
-              <select
-                value={selectedRoleId}
-                onChange={(e) => setSelectedRoleId(e.target.value)}
-                className="input-select"
-                style={{ fontFamily: font.sans, minWidth: 140 }}
-              >
-                <option value="">No role</option>
-                {roles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+              {selectedRoleId === '__new__' ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input
+                    autoFocus
+                    placeholder="Role name"
+                    value={newRoleName}
+                    onChange={(e) => setNewRoleName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && createInlineRole()}
+                    className="input-field"
+                    style={{ fontFamily: font.sans, minWidth: 120, padding: '5px 8px' }}
+                  />
+                  <button
+                    onClick={createInlineRole}
+                    disabled={creatingRole || !newRoleName.trim()}
+                    className="btn-primary"
+                    style={{ fontFamily: font.sans, fontSize: 13, padding: '5px 10px' }}
+                  >
+                    {creatingRole ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => { setSelectedRoleId(''); setNewRoleName('') }}
+                    className="btn-secondary"
+                    style={{ fontFamily: font.sans, fontSize: 13, padding: '5px 10px' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={selectedRoleId}
+                  onChange={(e) => setSelectedRoleId(e.target.value)}
+                  className="input-select"
+                  style={{ fontFamily: font.sans, minWidth: 140 }}
+                >
+                  <option value="">No role</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                  <option value="__new__">+ Add new role…</option>
+                </select>
+              )}
 
               <button
                 onClick={addToRoster}
@@ -303,7 +357,7 @@ export default function DefaultRoster({ projectId, myRole }: Props) {
                     {canDelete && (
                       <td style={{ ...cellStyle, textAlign: 'right' }}>
                         <button
-                          onClick={() => removeFromRoster(entry.id)}
+                          onClick={() => setPendingDelete({ id: entry.id, name: entry.person?.display_name ?? 'this person' })}
                           className="btn-link-danger"
                           style={{ fontSize: 13 }}
                         >
@@ -318,6 +372,22 @@ export default function DefaultRoster({ projectId, myRole }: Props) {
           </div>
         )}
       </div>
+      {pendingDelete && (
+        <>
+          <div onClick={() => setPendingDelete(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: colors.surface, border: `1px solid ${colors.borderStrong}`, borderRadius: radius.xl, padding: '24px 24px 20px', width: 'min(380px, calc(100vw - 32px))', zIndex: 1001, fontFamily: font.sans }}>
+            <h2 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 700, color: colors.textPrimary }}>Remove &ldquo;{pendingDelete.name}&rdquo; from roster?</h2>
+            <p style={{ margin: '0 0 20px', fontSize: 13, color: colors.textSecondary }}>This will remove the assignment from the default roster.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setPendingDelete(null)} className="btn-secondary" style={{ fontFamily: font.sans }}>Cancel</button>
+              <button
+                onClick={() => { removeFromRoster(pendingDelete.id); setPendingDelete(null) }}
+                style={{ fontFamily: font.sans, padding: '7px 16px', background: colors.red, color: 'white', border: 'none', borderRadius: radius.md, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >Remove</button>
+            </div>
+          </div>
+        </>
+      )}
     </section>
   )
 }

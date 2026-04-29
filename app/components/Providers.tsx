@@ -34,6 +34,7 @@ export default function Providers({ projectId, myRole }: Props) {
   const [editForm, setEditForm] = useState(blank)
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
 
   const canEdit = myRole === 'owner' || myRole === 'editor'
   const canDelete = myRole === 'owner'
@@ -138,7 +139,6 @@ export default function Providers({ projectId, myRole }: Props) {
   }
 
   const deleteProvider = async (id: string) => {
-    if (!confirm('Delete this provider? It can be recovered within 14 days.')) return
     setMsg('')
     const { data: { user } } = await supabase.auth.getUser()
     const now = new Date()
@@ -256,7 +256,7 @@ export default function Providers({ projectId, myRole }: Props) {
                   {provider.is_active ? 'Mark inactive' : 'Mark active'}
                 </button>
                 {canDelete && (
-                  <button onClick={() => deleteProvider(provider.id)} className="btn-link-danger" style={{ fontSize: 13 }}>
+                  <button onClick={() => setPendingDelete({ id: provider.id, name: provider.name })} className="btn-link-danger" style={{ fontSize: 13 }}>
                     Delete
                   </button>
                 )}
@@ -320,6 +320,22 @@ export default function Providers({ projectId, myRole }: Props) {
           </>
         )}
       </div>
+      {pendingDelete && (
+        <>
+          <div onClick={() => setPendingDelete(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: colors.surface, border: `1px solid ${colors.borderStrong}`, borderRadius: radius.xl, padding: '28px 28px 24px', width: 'min(420px, calc(100vw - 32px))', zIndex: 1001, fontFamily: font.sans }}>
+            <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: colors.textPrimary }}>Delete &ldquo;{pendingDelete.name}&rdquo;?</h2>
+            <p style={{ margin: '0 0 20px', fontSize: 14, color: colors.textSecondary }}>This will remove the provider from this project.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setPendingDelete(null)} className="btn-secondary" style={{ fontFamily: font.sans }}>Cancel</button>
+              <button
+                onClick={() => { deleteProvider(pendingDelete.id); setPendingDelete(null) }}
+                style={{ fontFamily: font.sans, padding: '8px 18px', background: colors.red, color: 'white', border: 'none', borderRadius: radius.md, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+              >Delete Provider</button>
+            </div>
+          </div>
+        </>
+      )}
     </section>
   )
 }

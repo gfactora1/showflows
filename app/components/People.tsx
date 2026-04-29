@@ -37,6 +37,7 @@ export default function People({ projectId, myRole }: Props) {
   const [loading, setLoading]                       = useState(false)
   const [msg, setMsg]                               = useState('')
   const [availabilityPerson, setAvailabilityPerson] = useState<Person | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
 
   const canEdit               = myRole === 'owner' || myRole === 'editor'
   const canDelete             = myRole === 'owner'
@@ -120,7 +121,6 @@ export default function People({ projectId, myRole }: Props) {
   }
 
   const deletePerson = async (id: string) => {
-    if (!confirm('Remove this person? They can be recovered within 14 days.')) return
     setMsg('')
     const { data: { user } } = await supabase.auth.getUser()
     const now = new Date()
@@ -269,7 +269,7 @@ export default function People({ projectId, myRole }: Props) {
                     </button>
                     {canDelete && (
                       <button
-                        onClick={() => deletePerson(person.id)}
+                        onClick={() => setPendingDelete({ id: person.id, name: person.display_name })}
                         className="btn-link-danger"
                         style={{ fontFamily: font.sans, fontSize: 12, padding: '4px 10px' }}
                       >
@@ -384,6 +384,22 @@ export default function People({ projectId, myRole }: Props) {
           canManage={canManageAvailability}
           onClose={() => setAvailabilityPerson(null)}
         />
+      )}
+      {pendingDelete && (
+        <>
+          <div onClick={() => setPendingDelete(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: colors.surface, border: `1px solid ${colors.borderStrong}`, borderRadius: radius.xl, padding: '28px 28px 24px', width: 'min(420px, calc(100vw - 32px))', zIndex: 1001, fontFamily: font.sans }}>
+            <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700, color: colors.textPrimary }}>Remove &ldquo;{pendingDelete.name}&rdquo;?</h2>
+            <p style={{ margin: '0 0 20px', fontSize: 14, color: colors.textSecondary }}>This will remove the person from this project. Past show assignments may still reference them.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setPendingDelete(null)} className="btn-secondary" style={{ fontFamily: font.sans }}>Cancel</button>
+              <button
+                onClick={() => { deletePerson(pendingDelete.id); setPendingDelete(null) }}
+                style={{ fontFamily: font.sans, padding: '8px 18px', background: colors.red, color: 'white', border: 'none', borderRadius: radius.md, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+              >Remove Person</button>
+            </div>
+          </div>
+        </>
       )}
     </section>
   )
